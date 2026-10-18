@@ -1,0 +1,35 @@
+import {FEATURES} from '@/lib/flags';
+import {cohortForImportedGroup} from '@/lib/group-cohorts';
+import {requireAccessibleYear} from '@/lib/semester-access';
+import {db,access,json,failure} from '@/lib/server';
+import {assertRosterEditor} from '@/lib/role-scope';
+import {readBody} from '@/lib/server';
+import {validateRoster} from '@/lib/domain';
+import {requireYear} from '@/lib/yearly-rosters';
+import {requireActiveCollege} from '@/lib/colleges';
+export async function POST(req:Request){try{
+ const a=await access(req),u=a.owner,d=db(),input=await readBody(req),yearId=await requireAccessibleYear(a,input.yearId,true);
+ if(input.useProvided)throw new Error('已取消内置名单，请上传你自己的 Excel 文件');
+ const data=validateRoster(input.rows).map(r=>({...r,college:r.college||String(input.college??'').trim()}));
+ if(data.some(r=>!r.college))throw new Error('导入名单需要填写院系，或先选择学院');
+ const selected=String(input.college??'').trim();
+ if(a.role!=='admin'&&(selected!==a.college||data.some(row=>row.college!==a.college)))throw new Error('无权限：导入范围必须是你负责的学院');
+ if(selected&&data.some(r=>r.college!==selected))throw new Error('文件中的院系与当前所选学院不一致');
+ if(a.role==='recorder'&&FEATURES.groupCohortScope){const unique=new Map(data.map(row=>[JSON.stringify([row.college,row.group]),row]));for(const row of unique.values())assertRosterEditor(a,row.college,await cohortForImportedGroup(u,yearId,row.college,row.group,data));}else for(const row of data)assertRosterEditor(a,row.college,row.cohort);
+ const current=await d.prepare('SELECT sid FROM roster_students WHERE owner=? AND year_id=?').bind(u,yearId).all<{sid:string}>(),seen=new Set(current.results.map(r=>r.sid));
+ const added=data.filter(r=>!seen.has(r.sid));if(!added.length)return json({students:0,groups:0,skipped:data.length});
+ for(const college of new Set(added.map(r=>r.college)))await requireActiveCollege(u,college);
+ const existingGroups=await d.prepare('SELECT id,college,name FROM roster_groups WHERE owner=? AND year_id=?').bind(u,yearId).all<{id:string;college:string;name:string}>();
+ const byKey=new Map(existingGroups.results.map(g=>[JSON.stringify([g.college,g.name]),g.id]));
+ const missing:{id:string;college:string;name:string;internal:string}[]=[];
+ for(const r of added){const key=JSON.stringify([r.college,r.group]);if(!byKey.has(key)){const id=crypto.randomUUID();byKey.set(key,id);missing.push({id,college:r.college,name:r.group,internal:`roster:${id}`});}}
+ const max=await d.prepare('SELECT COALESCE(MAX(position),-1) AS n FROM roster_students WHERE owner=? AND year_id=?').bind(u,yearId).first<{n:number}>();
+ const base=(max?.n??-1)+1;
+ const rows=added.map((r,i)=>({sid:r.sid,name:r.name,college:r.college,cohort:r.cohort,groupId:byKey.get(JSON.stringify([r.college,r.group])),position:base+i}));
+ await d.batch([
+ d.prepare("INSERT INTO groups(id,owner,name) SELECT json_extract(value,'$.id'),?,json_extract(value,'$.internal') FROM json_each(?)").bind(u,JSON.stringify(missing)),
+ d.prepare("INSERT INTO roster_groups(id,owner,year_id,college,name) SELECT json_extract(value,'$.id'),?,?,json_extract(value,'$.college'),json_extract(value,'$.name') FROM json_each(?)").bind(u,yearId,JSON.stringify(missing)),
+ d.prepare("INSERT INTO roster_students(owner,year_id,sid,name,college,group_id,position,active) SELECT ?,?,json_extract(value,'$.sid'),json_extract(value,'$.name'),json_extract(value,'$.college'),json_extract(value,'$.groupId'),json_extract(value,'$.position'),1 FROM json_each(?)").bind(u,yearId,JSON.stringify(rows)),
+ d.prepare("INSERT INTO student_cohorts(owner,year_id,sid,cohort) SELECT ?,?,json_extract(value,'$.sid'),json_extract(value,'$.cohort') FROM json_each(?)").bind(u,yearId,JSON.stringify(rows))
+ ]);return json({students:added.length,groups:missing.length,skipped:data.length-added.length});
+}catch(e){return failure(e);}}

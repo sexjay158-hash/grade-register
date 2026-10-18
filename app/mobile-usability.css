@@ -1,0 +1,30 @@
+/* Isolated mobile overrides, controlled by FEATURES.mobileUsability. */
+@media (max-width: 650px) {
+ .mobile-usability body {min-width:0;}
+ .mobile-usability .workspace {min-width:0;margin-left:max(12px,env(safe-area-inset-left));margin-right:max(12px,env(safe-area-inset-right));padding-bottom:max(26px,env(safe-area-inset-bottom));}
+ .mobile-usability .panel,.mobile-usability .task-content,.mobile-usability .upload-layout,.mobile-usability .section-head>div {min-width:0;}
+ .mobile-usability .panel {padding:16px;}
+ .mobile-usability input,.mobile-usability textarea,.mobile-usability [data-slot=select-trigger] {font-size:16px!important;}
+ .mobile-usability input,.mobile-usability [data-slot=select-trigger],.mobile-usability button[data-slot=button],.mobile-usability .main-tabs [data-slot=tabs-trigger] {min-height:44px;}
+ .mobile-usability .main-tabs {overscroll-behavior-x:contain;}
+ .mobile-usability .task-heading h1,.mobile-usability .task-heading p,.mobile-usability .notice p,.mobile-usability .upload-zone strong,.mobile-usability .upload-zone span,.mobile-usability .upload-zone small {overflow-wrap:anywhere;}
+ .mobile-usability .upload-zone {padding:16px;text-align:center;}
+ .mobile-usability .college-manager-actions .search-input,.mobile-usability .roster-actions .search-input {min-width:0;flex-basis:100%;}
+ .mobile-usability .college-manager-actions>button,.mobile-usability .roster-actions>button,.mobile-usability .mobile-photo-actions>button {flex:1;}
+ .mobile-usability .roster-table,.mobile-usability .college-manager-table,.mobile-usability .preview-grade-table {max-width:100%;min-width:0;overflow-x:auto;overscroll-behavior-x:contain;}
+ .mobile-usability .roster-table table {min-width:650px;}
+ .mobile-usability .roster-table::before,.mobile-usability .college-manager-table::before,.mobile-usability .preview-grade-table::before {content:'左右滑动表格查看完整内容和操作';display:block;font-size:12px;color:#65756c;margin-bottom:8px;}
+ .mobile-usability .preview-pagination,.mobile-usability .roster-pagination {flex-wrap:wrap;}
+ .mobile-usability .intake-actions {margin-left:0;min-width:0;width:100%;align-items:stretch;}
+ .mobile-usability .intake-actions>button {white-space:normal;height:auto;}
+ .mobile-usability .intake-help {max-width:none;text-align:left;}
+ .mobile-usability .settings-form .actions {flex-wrap:wrap;}
+ .mobile-usability .settings-form .actions>button {white-space:normal;height:auto;}
+ .mobile-usability [data-slot=dialog-content],.mobile-usability [data-slot=alert-dialog-content] {max-height:calc(100vh - 24px);max-height:calc(100dvh - 24px);overflow-y:auto;overscroll-behavior-y:contain;}
+ .mobile-usability .editor-dialog {max-height:calc(100dvh - 16px)!important;}
+ .mobile-usability .editor-footer {flex-wrap:wrap;}
+ .mobile-usability .editor-footer>button {flex:1;}
+ .mobile-usability .auth-shell {min-height:100dvh;padding:20px max(16px,env(safe-area-inset-left));}
+ .mobile-usability .auth-card {padding:24px 20px;}
+ .mobile-usability .footer {flex-wrap:wrap;}
+}

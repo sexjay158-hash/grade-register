@@ -1,0 +1,13 @@
+.ocr-probe-result {
+  max-height: 18rem;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  border: 1px solid #dce7df;
+  border-radius: 10px;
+  background: #f7fbf8;
+  color: #244434;
+  padding: 14px 16px;
+  font-size: 13px;
+  line-height: 1.7;
+}

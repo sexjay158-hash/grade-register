@@ -1,0 +1,37 @@
+import assert from 'node:assert/strict';
+const base='http://127.0.0.1:8787/api/',user='mv8ZMW175sSptJ0AXZgmLeGabJHg4hRfhFqVUc1zESzqojA8X7PJ4B';
+const nonce=crypto.randomUUID();
+let yearId='';
+async function request(path,data,method='POST',who=user){
+ if(yearId&&['state','export'].includes(path))path+='?yearId='+yearId;
+ if(data instanceof FormData){if(path==='intake')data.set('yearId',yearId);}else if(data&&path==='roster')data={...data,yearId};
+ const r=await fetch(base+path,{method:data===undefined?'GET':method,headers:{'Connection':'close','oai-authenticated-user-id':who,'oai-authenticated-user-email':'admin@example.com',...(data instanceof FormData?{}:{'Content-Type':'application/json'})},body:data===undefined?undefined:data instanceof FormData?data:JSON.stringify(data)});return {status:r.status,data:await r.json()};
+}
+const call=request;
+yearId=(await call('years',{label:'集成测试-'+nonce})).data.id;
+const g=await request('roster',{rows:[{sid:'001',cohort:'2024',name:'测试甲',college:'测试学院',group:'测试甲组'},{sid:'002',cohort:'2024',name:'测试乙',college:'测试学院',group:'测试甲组'},{sid:'003',cohort:'2024',name:'测试丙',college:'测试学院',group:'测试乙组'}]});assert.equal(g.status,200);
+let state=(await request('state')).data;const ga=state.groups.find(g=>g.name==='测试甲组'),gb=state.groups.find(g=>g.name==='测试乙组');
+const a=(await request('events',{groupId:ga.id,date:'2026-09-23'})).data.id;
+assert.equal((await request('events',{groupId:ga.id,date:'2026-09-23'})).data.id,a,'repeat start resumes the same draft');
+const b=(await request('events',{groupId:gb.id,date:'2026-09-23'})).data.id;
+assert.equal((await request('event/'+b)).data.event.number,1);
+assert.equal((await request('event/'+a,undefined,'GET','different-owner')).status,403,'cross-owner read blocked');
+assert.equal((await request('event/'+a,{version:0,action:'commit',rows:[{sid:'003',state:'scored',score:99}]},'PUT')).status,400,'wrong-group student blocked');
+const png=Buffer.concat([Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aWlUAAAAASUVORK5CYII=','base64'),Buffer.from(nonce)]);
+const form=()=>{const f=new FormData();f.set('eventId',a);f.set('file',new Blob([png],{type:'image/png'}),'test.png');return f;};
+const photo=await request('photos',form());assert.equal(photo.status,200);
+assert.equal((await request('photos',form())).status,400,'duplicate image blocked');
+const read=await fetch(base+'photo/'+photo.data.id,{headers:{'Connection':'close','oai-authenticated-user-id':user}});assert.equal(read.status,200);assert.deepEqual(Buffer.from(await read.arrayBuffer()),png);
+assert.equal((await request('ocr',{eventId:a,photoId:photo.data.id})).status,400,'missing OCR config is explicit');
+const rows=[{sid:'001',state:'scored',score:0},{sid:'002',state:'absent',score:null}];
+assert.equal((await request('event/'+a,{version:0,action:'commit',rows},'PUT')).status,200);
+assert.equal((await request('event/'+a,{version:0,action:'commit',rows},'PUT')).status,400,'stale write rejected');
+let exp=(await request('export')).data;assert.equal(exp.length,2);assert.equal(exp.find(r=>r.sid==='001').score,0);
+assert.equal((await request('photos',form())).status,400,'committed activity is locked');
+assert.equal((await request('event/'+a,{version:1,action:'reopen'},'PUT')).status,200);assert.equal((await request('export')).data.length,0,'withdrawn activity excluded from export');
+assert.equal((await request('event/'+a,{version:2,action:'commit',rows},'PUT')).status,200);
+const a2=(await request('events',{groupId:ga.id,date:'2026-09-30'})).data.id;
+assert.equal((await request('event/'+a2)).data.event.number,2);assert.equal((await request('event/'+b)).data.event.number,1);
+const audits=(await request('event/'+a)).data.audit;assert.equal(audits.length,3);
+const noAuth=await fetch(base+'state');assert.equal(noAuth.status,401);
+console.log('PASS: isolated API import, group sequencing, draft resumption, ownership, uploads, duplicate detection, zero score, conflicts, withdrawal, export and audit checks.');

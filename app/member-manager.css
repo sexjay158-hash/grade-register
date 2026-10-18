@@ -1,0 +1,23 @@
+.member-manager { display:grid; gap:20px; }
+.member-form { display:grid; grid-template-columns: minmax(210px,1.6fr) repeat(3,minmax(150px,1fr)) auto; gap:12px; align-items:end; }
+.member-form label { display:flex; flex-direction:column; gap:7px; font-size:14px; font-weight:600; }
+.member-form button { min-height:40px; }
+.member-share { padding:14px; border-radius:9px; background:#edf6f1; color:#305543; line-height:1.6; overflow-wrap:anywhere; }
+.member-share a { text-decoration:underline; }
+@media(max-width:950px){ .member-form { grid-template-columns:repeat(2,minmax(0,1fr)); } }
+@media(max-width:560px){ .member-form { grid-template-columns:1fr; } }
+
+/* Local accounts use bounded columns; long select text cannot cross fields. */
+.local-member-form{grid-template-columns:repeat(3,minmax(0,1fr));gap:20px 24px;align-items:start}
+.local-member-form label{min-width:0;line-height:1.6}
+.local-member-form input,.local-member-form [data-slot=select-trigger]{width:100%;min-width:0;max-width:100%;height:42px}
+.local-member-form [data-slot=select-value]{display:block;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.local-member-form .password-entry{min-width:0;flex-wrap:wrap}
+.local-member-form .password-entry input{flex:1;min-width:120px;width:0}
+.local-member-form .password-entry button{flex-shrink:0}
+.member-form-actions{grid-column:1/-1;display:flex;gap:12px;flex-wrap:wrap}
+.member-form-actions button{min-width:140px}
+.own-password .local-member-form{grid-template-columns:repeat(2,minmax(0,1fr));max-width:800px}
+.mobile-photo-actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:12px}
+@media(max-width:1000px){.local-member-form{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:600px){.local-member-form,.own-password .local-member-form{grid-template-columns:minmax(0,1fr)}.member-form-actions button{flex:1}.issued-credential{flex-direction:column;align-items:stretch}}

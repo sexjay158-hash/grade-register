@@ -1,0 +1,50 @@
+import {TEMPORARY_INTERNET_PREVIEW} from './temporary-preview-config.mjs';
+// Set false to disable OCR while preserving manual registration and existing data.
+export const FEATURES = {
+ temporaryInternetPreview: TEMPORARY_INTERNET_PREVIEW,
+ photoRecognition: true,
+ localRapidOcr: true,
+ // Set false to fall back to the per-computer RapidOCR workflow.
+ browserOcr: true,
+ collegeWorkspaces: true,
+ collegeDirectory: true,
+ archivedCollegeDeletion: true,
+ sidCohort: true,
+ collegeTeamLast: true,
+ preserveExcelOrder: true,
+ comfortHeader: true,
+ // Set false to restore the shared heading, filters and statistics on every tab.
+ independentPages: true,
+ sixCharacterPasswords: true,
+ mobileLanPreview: true,
+ mobileUsability: true,
+ yearlyRosters: true,
+ semesterArchives: true,
+ confirmedGradeLock: true,
+ adminRecognitionSettings: true,
+ // Set false to restore single-request Excel imports (up to 10,000 rows).
+ rosterBatchImport: true,
+ autoGroupRecognition: true,
+ automaticPhotoRegistration: true,
+ mixedGroupPhoto: true,
+ manualScoreEntry: true,
+ editableExportPreview: true,
+ activityRating: true,
+ photoRatingRecognition: true,
+ manualPhotoRating: true,
+ recorderActivityRating: true,
+ photoActivityDateGuard: true,
+ sharedRoles: true,
+ gradeRosterManagement: true,
+ groupCohortScope: true,
+ studentGradeManagement: true,
+ // Set false and republish to return to the previous ChatGPT login while retaining local accounts.
+ localAccounts: true,
+ continuousPhotoUpload: true,
+ photoUploadReview: true,
+ unrecognizedPhotoDeletion: true,
+ directScoreEntry: true,
+ draftDeletion: true,
+ activityDeletion: true,
+ rememberOcrCredentials: true
+};
