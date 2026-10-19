@@ -11,6 +11,7 @@ export async function ensureYearlyRoster(owner:string){
   d.prepare('CREATE TABLE IF NOT EXISTS roster_years(id TEXT PRIMARY KEY,owner TEXT NOT NULL,label TEXT NOT NULL,created TEXT NOT NULL,updated TEXT NOT NULL)'),
   d.prepare('CREATE TABLE IF NOT EXISTS roster_groups(id TEXT PRIMARY KEY,owner TEXT NOT NULL,year_id TEXT NOT NULL,college TEXT NOT NULL,name TEXT NOT NULL,UNIQUE(owner,year_id,college,name))'),
   d.prepare('CREATE TABLE IF NOT EXISTS roster_students(owner TEXT NOT NULL,year_id TEXT NOT NULL,sid TEXT NOT NULL,name TEXT NOT NULL,college TEXT NOT NULL,group_id TEXT NOT NULL,position INTEGER NOT NULL,active INTEGER NOT NULL DEFAULT 1,PRIMARY KEY(owner,year_id,sid))'),
+  d.prepare('CREATE TABLE IF NOT EXISTS student_numbers(owner TEXT NOT NULL,year_id TEXT NOT NULL,sid TEXT NOT NULL,number TEXT NOT NULL,PRIMARY KEY(owner,year_id,sid))'),
   d.prepare('CREATE TABLE IF NOT EXISTS group_cohorts(owner TEXT NOT NULL,year_id TEXT NOT NULL,group_id TEXT NOT NULL,cohort TEXT,manual INTEGER NOT NULL DEFAULT 0,PRIMARY KEY(owner,group_id))'),
   d.prepare('CREATE INDEX IF NOT EXISTS roster_student_group_scope ON roster_students(owner,year_id,group_id,active)'),
   d.prepare('CREATE TABLE IF NOT EXISTS semester_archives(owner TEXT NOT NULL,year_id TEXT NOT NULL,archived_at TEXT NOT NULL,archived_by TEXT NOT NULL,PRIMARY KEY(owner,year_id))'),

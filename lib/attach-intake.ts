@@ -11,7 +11,7 @@ export async function attachIntake(user:string,id:string,groupId:string,a?:Acces
  const yearId=await yearForIntake(user,id);
  await ensureColleges(user);
  if(!await d.prepare('SELECT g.id FROM roster_groups g JOIN colleges c ON c.owner=g.owner AND c.name=g.college AND c.active=1 WHERE g.id=? AND g.owner=? AND g.year_id=?').bind(groupId,user,yearId).first())throw new Error('小组不属于该照片的学年或学院已归档');
- const members=await d.prepare(`SELECT s.sid,s.name,s.college,${scopeCohortExpr()} AS cohort FROM roster_students s ${cohortJoin()} WHERE s.owner=? AND s.group_id=? AND s.active=1`).bind(user,groupId).all<{sid:string;name:string;college:string;cohort:string}>();
+ const members=await d.prepare(`SELECT s.sid,COALESCE(sn.number,s.sid) AS student_number,s.name,s.college,${scopeCohortExpr()} AS cohort FROM roster_students s ${cohortJoin()} WHERE s.owner=? AND s.group_id=? AND s.active=1`).bind(user,groupId).all<{sid:string;name:string;college:string;cohort:string}>();
  const allowed=a&&a.role!=='admin'?members.results.filter(s=>s.college===a.college&&(a.role!=='recorder'||s.cohort===a.cohort)):members.results;
  const lines=JSON.parse(photo.lines||'[]') as string[],parsed=matchLines(lines,allowed);
  const event=await d.prepare("SELECT * FROM events WHERE owner=? AND group_id=? AND status='draft'").bind(user,groupId).first<any>();

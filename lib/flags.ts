@@ -36,6 +36,8 @@ export const FEATURES = {
  photoActivityDateGuard: true,
  sharedRoles: true,
  gradeRosterManagement: true,
+ duplicateStudentNumbers: true,
+ collegeRosterClear: true,
  groupCohortScope: true,
  studentGradeManagement: true,
  // Set false and republish to return to the previous ChatGPT login while retaining local accounts.

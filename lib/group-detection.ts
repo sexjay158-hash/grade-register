@@ -1,16 +1,17 @@
+import {studentNumber} from './student-number';
 type CandidateGroup={id:string;name:string};
-type CandidateStudent={sid:string;name:string;group_id:string};
+type CandidateStudent={sid:string;student_number?:string;name:string;group_id:string};
 export function detectGroup(lines:string[],groups:CandidateGroup[],students:CandidateStudent[],directScoreEntry=true){
  const text=lines.join(' '),flat=text.replace(/\s+/g,''),head=lines.slice(0,5).join('').replace(/\s+/g,'');
  const idHits=new Map<string,Set<string>>(),nameHits=new Map<string,Set<string>>(),scoredNameHits=new Map<string,Set<string>>(),pairHits=new Map<string,Set<string>>();
  const add=(map:Map<string,Set<string>>,group:string,sid:string)=>{if(!map.has(group))map.set(group,new Set());map.get(group)!.add(sid);};
  const nameCounts=new Map<string,number>();for(const s of students)nameCounts.set(s.name,(nameCounts.get(s.name)??0)+1);
  for(const s of students){
-  if(/^\d{5,20}$/.test(s.sid)&&new RegExp('(^|\\D)'+s.sid+'(?!\\d)').test(text))add(idHits,s.group_id,s.sid);
-  if(/^\d{5,20}$/.test(s.sid)&&s.name?.length>=2&&lines.some(line=>{const compact=line.replace(/\s+/g,'');return compact.includes(s.sid)&&compact.includes(s.name);}))add(pairHits,s.group_id,s.sid);
+  if(/^\d{5,20}$/.test(studentNumber(s))&&new RegExp('(^|\\D)'+studentNumber(s)+'(?!\\d)').test(text))add(idHits,s.group_id,studentNumber(s));
+  if(/^\d{5,20}$/.test(studentNumber(s))&&s.name?.length>=2&&lines.some(line=>{const compact=line.replace(/\s+/g,'');return compact.includes(studentNumber(s))&&compact.includes(s.name);}))add(pairHits,s.group_id,studentNumber(s));
   if(s.name?.length>=2&&nameCounts.get(s.name)===1&&flat.includes(s.name)){
-   add(nameHits,s.group_id,s.sid);
-   if(lines.some(line=>line.replace(/\s+/g,'').includes(s.name)&&/\d+(?:\.\d+)?/.test(line.replaceAll(s.name,' '))))add(scoredNameHits,s.group_id,s.sid);
+   add(nameHits,s.group_id,studentNumber(s));
+   if(lines.some(line=>line.replace(/\s+/g,'').includes(s.name)&&/\d+(?:\.\d+)?/.test(line.replaceAll(s.name,' '))))add(scoredNameHits,s.group_id,studentNumber(s));
   }
  }
  const names=groups.filter(g=>{const short=g.name.replace(/^机械工程学院/,'').replace(/\s+/g,'');return head.includes(g.name.replace(/\s+/g,''))||(short.length>=5&&head.includes(short));});

@@ -1,5 +1,6 @@
-import {normalizeCohort} from './cohort';
-export type Student={sid:string;name:string;college:string;group_id:string;position:number;cohort?:string;management_cohort?:string|null};
+import {rosterCohort,studentNumber} from './student-number';
+import {FEATURES} from './flags';
+export type Student={sid:string;student_number?:string;name:string;college:string;group_id:string;position:number;cohort?:string;management_cohort?:string|null};
 export type Score={sid:string;score:number|null;state:string;note?:string};
 export function validateScores(rows:unknown,members:string[]):Score[]{
  if(!Array.isArray(rows)||rows.length>500)throw new Error('成绩记录格式不正确');
@@ -18,20 +19,20 @@ export function validateRoster(rows:unknown,maxRows=10000){
  return rows.map((r,i)=>{
   const sid=String(r.sid??'').trim(),name=String(r.name??'').trim(),college=String(r.college??'').trim(),group=String(r.group??'').trim();
   if(!sid||!name||!group||sid.length>40||name.length>80||group.length>150||college.length>150)throw new Error(`第 ${i+1} 条名单缺少学号、姓名或小组，或内容过长`);
-  if(seen.has(sid))throw new Error(`学号 ${sid} 重复，请先修正名单`);
-  let cohort:string;try{cohort=normalizeCohort(r.cohort,sid);}catch(e){throw new Error(`第 ${i+1} 条名单，学号 ${sid}：${(e as Error).message}`);}
-  seen.add(sid);return {sid,name,college,group,cohort,position:i};
+  if(!FEATURES.duplicateStudentNumbers&&seen.has(sid))throw new Error(`学号 ${sid} 重复，请先修正名单`);
+  const cohort=rosterCohort(sid,r.cohort);
+  seen.add(sid);return {sid,name,college,group,cohort,position:i,...(Number.isInteger(r.occurrence)&&r.occurrence>0&&r.occurrence<=50000?{occurrence:r.occurrence as number}:{})};
  });
 }
-export function matchLines(lines:string[],members:{sid:string;name:string}[]){
+export function matchLines(lines:string[],members:{sid:string;student_number?:string;name:string}[]){
  const matched:Score[]=[],unresolved:string[]=[],seen=new Set<string>();
  for(const line of lines){
-  const compact=line.replace(/\s+/g,''),byId=members.filter(m=>new RegExp('(^|\\D)'+m.sid.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+'(?!\\d)').test(line));
-  const found=byId.length?byId:members.filter(m=>m.name.length>=2&&compact.includes(m.name));
+  const compact=line.replace(/\s+/g,''),byId=members.filter(m=>new RegExp('(^|\\D)'+studentNumber(m).replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+'(?!\\d)').test(line));
+  const found=byId.length>1?byId.filter(m=>m.name.length>=2&&compact.includes(m.name)):byId.length?byId:members.filter(m=>m.name.length>=2&&compact.includes(m.name));
   if(found.length!==1){unresolved.push(line);continue;}
   const m=found[0];
   if(byId.length&&members.some(other=>other.sid!==m.sid&&other.name!==m.name&&!m.name.includes(other.name)&&other.name.length>=2&&compact.includes(other.name))){unresolved.push(line);continue;}
-  const rest=line.replaceAll(m.sid,' ').replaceAll(m.name,' '),absent=/缺席|缺勤/.test(rest),excused=/请假/.test(rest);
+  const rest=line.replaceAll(studentNumber(m),' ').replaceAll(m.name,' '),absent=/缺席|缺勤/.test(rest),excused=/请假/.test(rest);
   let nums=[...rest.matchAll(/\d+(?:\.\d+)?/g)].map(x=>Number(x[0]));
   const leadingIndex=(nums.length>1||absent||excused)&&Number.isInteger(nums[0])&&nums[0]>=1&&nums[0]<=60;
   if(leadingIndex)nums=nums.slice(1);

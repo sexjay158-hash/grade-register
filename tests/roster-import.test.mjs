@@ -40,9 +40,9 @@ test('formatted numeric student IDs retain their displayed leading zeros',()=>{
  assert.equal(parseRosterRows(rows)[0].sid,'000123');
 });
 
-test('incomplete and duplicate students report their actual Excel rows',()=>{
+test('incomplete rows report Excel positions and duplicate numbers remain separate',()=>{
  assert.throws(()=>parseRosterRows([['学号','姓名','小组'],['1','甲一','一组'],['','甲二','一组']]),/第 3 行缺少学号/);
- assert.throws(()=>parseRosterRows([['学号','姓名','小组'],['1','甲一','一组'],['1','甲二','一组']]),/第 3 行学号 1 重复.*第 2 行/);
+ assert.equal(parseRosterRows([['学号','姓名','小组'],['1','甲一','一组'],['1','甲二','一组']]).length,2);
  assert.throws(()=>parseRosterRows([['学号','姓名','小组'],['','','']]),/没有可导入的学生/);
 });
 

@@ -33,7 +33,7 @@ export async function POST(req:Request){try{
  }
  const yearId=await yearForIntake(u,id);
  await ensureColleges(u);
- const [g,s]=await d.batch([d.prepare('SELECT g.id,g.name,g.college FROM roster_groups g JOIN colleges c ON c.owner=g.owner AND c.name=g.college AND c.active=1 WHERE g.owner=? AND g.year_id=?').bind(u,yearId),d.prepare(`SELECT s.sid,s.name,s.group_id,s.college,${scopeCohortExpr()} AS cohort FROM roster_students s ${cohortJoin()} JOIN colleges c ON c.owner=s.owner AND c.name=s.college AND c.active=1 WHERE s.owner=? AND s.year_id=? AND s.active=1`).bind(u,yearId)]);
+ const [g,s]=await d.batch([d.prepare('SELECT g.id,g.name,g.college FROM roster_groups g JOIN colleges c ON c.owner=g.owner AND c.name=g.college AND c.active=1 WHERE g.owner=? AND g.year_id=?').bind(u,yearId),d.prepare(`SELECT s.sid,COALESCE(sn.number,s.sid) AS student_number,s.name,s.group_id,s.college,${scopeCohortExpr()} AS cohort FROM roster_students s ${cohortJoin()} JOIN colleges c ON c.owner=s.owner AND c.name=s.college AND c.active=1 WHERE s.owner=? AND s.year_id=? AND s.active=1`).bind(u,yearId)]);
  const allowedStudents=a.role==='admin'?s.results:s.results.filter((student:any)=>student.college===a.college&&(a.role!=='recorder'||student.cohort===a.cohort));
  const allowedGroups=a.role==='admin'?g.results:g.results.filter((group:any)=>group.college===a.college&&allowedStudents.some((student:any)=>student.group_id===group.id));
  const result=detectGroup(lines,allowedGroups as any,allowedStudents as any,FEATURES.directScoreEntry);

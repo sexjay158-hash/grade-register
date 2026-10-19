@@ -6,8 +6,8 @@ import {majorityCohort} from './group-cohort-domain';
 export async function refreshGroupCohorts(owner:string,yearId:string){
  if(!FEATURES.groupCohortScope)return;
  await db().prepare(`WITH counts AS (
- SELECT group_id,substr(sid,1,4) AS cohort,COUNT(*) AS n FROM roster_students
- WHERE owner=? AND year_id=? AND active=1 AND substr(sid,1,4) GLOB '[12][0-9][0-9][0-9]' GROUP BY group_id,substr(sid,1,4)
+ SELECT group_id,substr(COALESCE((SELECT number FROM student_numbers sn WHERE sn.owner=roster_students.owner AND sn.year_id=roster_students.year_id AND sn.sid=roster_students.sid),sid),1,4) AS cohort,COUNT(*) AS n FROM roster_students
+ WHERE owner=? AND year_id=? AND active=1 AND substr(COALESCE((SELECT number FROM student_numbers sn WHERE sn.owner=roster_students.owner AND sn.year_id=roster_students.year_id AND sn.sid=roster_students.sid),sid),1,4) GLOB '[12][0-9][0-9][0-9]' GROUP BY group_id,substr(COALESCE((SELECT number FROM student_numbers sn WHERE sn.owner=roster_students.owner AND sn.year_id=roster_students.year_id AND sn.sid=roster_students.sid),sid),1,4)
  ),ranked AS (SELECT *,DENSE_RANK() OVER(PARTITION BY group_id ORDER BY n DESC) AS rank FROM counts),
  winners AS (SELECT group_id,CASE WHEN COUNT(*)=1 THEN MAX(cohort) ELSE NULL END AS cohort FROM ranked WHERE rank=1 GROUP BY group_id)
  INSERT INTO group_cohorts(owner,year_id,group_id,cohort,manual)
@@ -22,6 +22,6 @@ export async function cohortForGroup(owner:string,yearId:string,college:string,n
  return row?row.cohort??'':fallback;
 }
 export async function cohortForImportedGroup(owner:string,yearId:string,college:string,name:string,rows:{college:string;group:string;cohort:string}[]){
- const fallback=majorityCohort(rows.filter(row=>row.college===college&&row.group===name).map(row=>normalizeCohort(row.cohort)));
+ const fallback=majorityCohort(rows.filter(row=>row.college===college&&row.group===name).map(row=>row.cohort).filter(Boolean));
  return cohortForGroup(owner,yearId,college,name,fallback??'');
 }

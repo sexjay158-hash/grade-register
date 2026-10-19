@@ -1,4 +1,5 @@
 "use client";
+import {studentNumber} from '@/lib/student-number';
 import {useEffect,useState} from 'react';
 import {Button} from '@/components/ui/button';
 import {Input} from '@/components/ui/input';
@@ -26,7 +27,7 @@ export function StudentGrades({student,yearId,readOnly,onClose,onChanged}:{stude
  async function clear(event:Activity){if(busy||!window.confirm(`清除 ${student.name} 第 ${event.number} 次活动的成绩？该同学会恢复为未录入，其他学生成绩和整组活动保留。`))return;setBusy(true);try{await request('event/'+event.id,{version:event.version,sid:student.sid,action:'clear'},'PATCH');setEditing(null);await load();await onChanged();toast.success('该同学本次成绩已清除');}catch(e){toast.error((e as Error).message);await load();}finally{setBusy(false);}}
  const draft=events.find(event=>event.status==='draft');
  const valid=state!=='scored'||score.trim()!==''&&Number.isFinite(Number(score))&&Number(score)>=0&&Number(score)<=10000;
- return <Dialog open onOpenChange={open=>{if(!open&&!busy)onClose();}}><DialogContent className="student-grades-dialog"><DialogHeader><DialogTitle>{student.name} · 个人成绩</DialogTitle><DialogDescription>{student.sid} · 只显示该同学的成绩。年级负责人可维护未确认成绩；院负责人确认后锁定。清除个人成绩保留活动和其他学生的数据。</DialogDescription></DialogHeader>
+ return <Dialog open onOpenChange={open=>{if(!open&&!busy)onClose();}}><DialogContent className="student-grades-dialog"><DialogHeader><DialogTitle>{student.name} · 个人成绩</DialogTitle><DialogDescription>{studentNumber(student)} · 只显示该同学的成绩。年级负责人可维护未确认成绩；院负责人确认后锁定。清除个人成绩保留活动和其他学生的数据。</DialogDescription></DialogHeader>
  <div className="student-grades-toolbar"><Button variant="outline" disabled={busy||loading} onClick={()=>load()}>刷新成绩</Button>{!readOnly&&canCreate&&(!draft||draft.state==='unrecorded')&&<Button disabled={busy||loading} onClick={()=>edit(draft??'new')}>{draft?'补录本次成绩':'新增活动成绩'}</Button>}</div>
  {error&&<p role="alert" className="form-error">{error}</p>}
  {loading?<p className="muted">正在读取成绩…</p>:<div className="student-grades-list">{events.map(event=><article key={event.id} className="student-grade-card"><div><strong>第 {event.number} 次活动</strong><p>{event.date} · {event.status==='committed'?'已确认':'待确认'}</p></div><span>{event.state==='scored'?event.score:labels[event.state]??event.state}</span><div className="student-grade-actions">{!readOnly&&event.editable?<><Button size="sm" variant="outline" disabled={busy} onClick={()=>edit(event)}>{event.state==='unrecorded'?'录入':'修改'}</Button>{event.state!=='unrecorded'&&<Button size="sm" variant="ghost" disabled={busy} onClick={()=>clear(event)}>删除成绩</Button>}</>:<small className="muted">只读</small>}</div></article>)}{!events.length&&!error&&<p className="muted">暂无活动成绩，可新增后录入。</p>}</div>}

@@ -12,7 +12,7 @@ export async function attachMixedIntake(user:string,id:string,a?:Access){
  const lines=JSON.parse(photo.lines||'[]') as string[];
  const yearId=await yearForIntake(user,id);
  await ensureColleges(user);
- const students=await d.prepare(`SELECT s.sid,s.name,s.group_id,s.college,${scopeCohortExpr()} AS cohort FROM roster_students s ${cohortJoin()} JOIN colleges c ON c.owner=s.owner AND c.name=s.college AND c.active=1 WHERE s.owner=? AND s.year_id=? AND s.active=1`).bind(user,yearId).all<{sid:string;name:string;group_id:string;college:string;cohort:string}>();
+ const students=await d.prepare(`SELECT s.sid,COALESCE(sn.number,s.sid) AS student_number,s.name,s.group_id,s.college,${scopeCohortExpr()} AS cohort FROM roster_students s ${cohortJoin()} JOIN colleges c ON c.owner=s.owner AND c.name=s.college AND c.active=1 WHERE s.owner=? AND s.year_id=? AND s.active=1`).bind(user,yearId).all<{sid:string;name:string;group_id:string;college:string;cohort:string}>();
  const allowed=a&&a.role!=='admin'?students.results.filter(s=>s.college===a.college&&(a.role!=='recorder'||s.cohort===a.cohort)):students.results;
  const parsed=groupMatchedLines(lines,allowed);
  if(!parsed.groups.size){

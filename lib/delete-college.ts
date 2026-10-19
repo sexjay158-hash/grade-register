@@ -31,6 +31,8 @@ export async function deleteArchivedCollege(owner:string,id:string,confirmedName
   statement(`DELETE FROM event_ratings WHERE owner=? AND event_id IN (${eventSql})`,[owner,...eventArgs]),
   statement(`DELETE FROM events WHERE owner=? AND group_id IN (${groupSql})`,[owner,owner,college.name]),
   statement('DELETE FROM student_cohorts WHERE owner=? AND EXISTS(SELECT 1 FROM roster_students s WHERE s.owner=student_cohorts.owner AND s.year_id=student_cohorts.year_id AND s.sid=student_cohorts.sid AND s.college=?)',[owner,college.name]),
+  statement('DELETE FROM student_numbers WHERE owner=? AND EXISTS(SELECT 1 FROM roster_students s WHERE s.owner=student_numbers.owner AND s.year_id=student_numbers.year_id AND s.sid=student_numbers.sid AND s.college=?)',[owner,college.name]),
+  statement(`DELETE FROM group_cohorts WHERE owner=? AND group_id IN (${groupSql})`,[owner,owner,college.name]),
   statement('DELETE FROM roster_students WHERE owner=? AND college=?',[owner,college.name]),
   statement(`DELETE FROM students WHERE owner=? AND (college=? OR group_id IN (${groupSql}))`,[owner,college.name,owner,college.name]),
   statement(`DELETE FROM groups WHERE owner=? AND id IN (${groupSql})`,[owner,owner,college.name]),

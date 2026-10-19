@@ -4,8 +4,8 @@ import {access,db,type Access} from './server';
 import {requireActiveCollege} from './colleges';
 export {normalizeCohort} from './cohort';
 
-export const cohortJoin=(alias='s')=>`LEFT JOIN student_cohorts sc ON sc.owner=${alias}.owner AND sc.year_id=${alias}.year_id AND sc.sid=${alias}.sid LEFT JOIN group_cohorts gc ON gc.owner=${alias}.owner AND gc.group_id=${alias}.group_id`;
-export const cohortExpr=(alias='s')=>FEATURES.sidCohort?`CASE WHEN substr(${alias}.sid,1,4) GLOB '[12][0-9][0-9][0-9]' THEN substr(${alias}.sid,1,4) ELSE '' END`:`COALESCE(sc.cohort,CASE WHEN substr(${alias}.sid,1,4) GLOB '[12][0-9][0-9][0-9]' THEN substr(${alias}.sid,1,4) ELSE '' END)`;
+export const cohortJoin=(alias='s')=>`LEFT JOIN student_numbers sn ON sn.owner=${alias}.owner AND sn.year_id=${alias}.year_id AND sn.sid=${alias}.sid LEFT JOIN student_cohorts sc ON sc.owner=${alias}.owner AND sc.year_id=${alias}.year_id AND sc.sid=${alias}.sid LEFT JOIN group_cohorts gc ON gc.owner=${alias}.owner AND gc.group_id=${alias}.group_id`;
+export const cohortExpr=(alias='s')=>FEATURES.sidCohort?`CASE WHEN substr(COALESCE(sn.number,${alias}.sid),1,4) GLOB '[12][0-9][0-9][0-9]' THEN substr(COALESCE(sn.number,${alias}.sid),1,4) ELSE '' END`:`COALESCE(sc.cohort,CASE WHEN substr(COALESCE(sn.number,${alias}.sid),1,4) GLOB '[12][0-9][0-9][0-9]' THEN substr(COALESCE(sn.number,${alias}.sid),1,4) ELSE '' END)`;
 export const scopeCohortExpr=(alias='s')=>FEATURES.groupCohortScope?'gc.cohort':cohortExpr(alias);
 export function canReadCollege(a:Access,college:string){return a.role==='admin'||a.college===college;}
 export function assertRosterEditor(a:Access,college:string,cohort?:string){

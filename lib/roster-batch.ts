@@ -7,7 +7,7 @@ export async function uploadRosterBatches<Row>(rows:Row[],upload:(batch:Row[])=>
  for(let start=0;start<rows.length;start+=ROSTER_BATCH_SIZE){
   let part:Result;
   try{part=await upload(rows.slice(start,start+ROSTER_BATCH_SIZE));}
-  catch(error){const reason=error instanceof Error?error.message:'导入失败';throw new Error(`名单已处理 ${start}/${rows.length} 人：${reason}。可重新选择同一文件继续，已有学号会跳过`);}
+  catch(error){const reason=error instanceof Error?error.message:'导入失败';throw new Error(`名单已处理 ${start}/${rows.length} 人：${reason}。可重新选择同一文件继续，完全相同的已有名单会跳过`);}
   result.students+=part.students;result.groups+=part.groups;result.skipped+=part.skipped;
   onProgress(Math.min(start+ROSTER_BATCH_SIZE,rows.length),rows.length);
  }

@@ -4,7 +4,7 @@ import {matchLines} from '@/lib/domain';
 import {FEATURES} from '@/lib/flags';
 import {validatedOcrLines} from '@/lib/ocr-lines';
 import {assertEventScope,assertPhotoScope,cohortExpr,scopeCohortExpr,cohortJoin} from '@/lib/role-scope';
-async function membersFor(a:Access,groupId:string){const rows=await db().prepare(`SELECT s.sid,s.name,s.college,${scopeCohortExpr()} AS cohort FROM roster_students s ${cohortJoin()} WHERE s.owner=? AND s.group_id=? AND s.active=1`).bind(a.owner,groupId).all<{sid:string;name:string;college:string;cohort:string}>();return rows.results.filter(s=>a.role==='admin'||s.college===a.college&&(a.role!=='recorder'||s.cohort===a.cohort));}
+async function membersFor(a:Access,groupId:string){const rows=await db().prepare(`SELECT s.sid,COALESCE(sn.number,s.sid) AS student_number,s.name,s.college,${scopeCohortExpr()} AS cohort FROM roster_students s ${cohortJoin()} WHERE s.owner=? AND s.group_id=? AND s.active=1`).bind(a.owner,groupId).all<{sid:string;name:string;college:string;cohort:string}>();return rows.results.filter(s=>a.role==='admin'||s.college===a.college&&(a.role!=='recorder'||s.cohort===a.cohort));}
 export async function POST(req:Request){try{
  const a=await access(req);requireEditor(a);const u=a.owner;if(!FEATURES.photoRecognition)throw new Error('照片识别功能已关闭');
  const {apiKey,secretKey,eventId,photoId,action,recognizedLines,recognizedRatingText}=await readBody(req);

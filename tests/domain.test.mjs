@@ -24,10 +24,10 @@ test('local OCR accepts clean rows and rejects malformed or oversized results',(
  assert.throws(()=>validatedOcrLines(['001 张三 95',4]),/格式错误/);
  assert.throws(()=>validatedOcrLines(Array(301).fill('a')),/格式错误/);
 });
-test('roster derives cohort from student ID and rejects duplicates or invalid prefixes',()=>{
+test('roster derives valid cohorts while retaining duplicate or incorrect numbers',()=>{
  assert.deepEqual(validateRoster([{sid:'2024001',cohort:'2025',name:'甲',group:'组'}])[0],{sid:'2024001',cohort:'2024',name:'甲',college:'',group:'组',position:0});
- assert.throws(()=>validateRoster([{sid:'001',cohort:'2024',name:'甲',group:'组'}]),/学号前四位/);
- assert.throws(()=>validateRoster([{sid:'2024001',cohort:'2024',name:'甲',group:'组'},{sid:'2024001',cohort:'2024',name:'乙',group:'组'}]),/重复/);
+ assert.equal(validateRoster([{sid:'001',cohort:'2024',name:'甲',group:'组'}])[0].cohort,'2024');
+ assert.equal(validateRoster([{sid:'2024001',cohort:'2024',name:'甲',group:'组'},{sid:'2024001',cohort:'2024',name:'乙',group:'组'}]).length,2);
 });
 test('zero, absent and unrecorded stay distinct; invalid and foreign rows rejected',()=>{
  const rows=validateScores([{sid:'01',score:0,state:'scored'},{sid:'02',score:99,state:'absent'},{sid:'03',score:null,state:'unrecorded'}],['01','02','03']);
@@ -93,3 +93,5 @@ test('group responsibility follows dominant cohort while ties need assignment',(
  assert.equal(majorityCohort(['2024','2025']),null);
  assert.equal(majorityCohort([]),null);
 });
+
+test('duplicate displayed numbers match only when name disambiguates, while Excel keeps separate rows',()=>{const students=[{sid:'a',student_number:'2024001',name:'张甲',college:'学院',group_id:'g',position:0},{sid:'b',student_number:'2024001',name:'李乙',college:'学院',group_id:'g',position:1}];const matched=matchLines(['2024001 张甲 80','2024001 李乙 91','2024001 99'],students);assert.deepEqual(matched.matched.map(r=>[r.sid,r.score]),[['a',80],['b',91]]);assert.equal(matched.unresolved.length,1);const wb=makeWorkbook(students,[{id:'g',name:'组'}],matched.matched.map(r=>({...r,number:1,group_id:'g'})));assert.equal(wb.Sheets.Sheet1.A3.v,'2024001');assert.equal(wb.Sheets.Sheet1.A4.v,'2024001');assert.equal(wb.Sheets.Sheet1.E3.v,80);assert.equal(wb.Sheets.Sheet1.E4.v,91);});
