@@ -14,11 +14,11 @@ const pages = {
  members: {title:'账号与权限',description:'为老师开通账号，分配学院和入学年级，管理登录权限。',icon:ShieldCheck},
 } as const;
 
-export function WorkspacePage({page,context,children,readOnlyRoster=false}:{page:keyof typeof pages;context?:ReactNode;children:ReactNode;readOnlyRoster?:boolean}){
+export function WorkspacePage({page,context,children,readOnlyRoster=false,memberDirectory=false}:{page:keyof typeof pages;context?:ReactNode;children:ReactNode;readOnlyRoster?:boolean;memberDirectory?:boolean}){
  if(!FEATURES.independentPages)return <>{children}</>;
  const {title,description,icon:Icon}=pages[page];
- return <main className={`task-page task-page-${page}`} aria-label={title}>
-  <header className="task-heading"><span className="task-icon"><Icon size={24}/></span><div><h1>{title}</h1><p>{readOnlyRoster?'仅查看负责年级的学生；名单由院负责人或管理员维护。':description}</p></div></header>
+ return <main className={`task-page task-page-${page}`} aria-label={memberDirectory?'本院年级负责人':title}>
+  <header className="task-heading"><span className="task-icon"><Icon size={24}/></span><div><h1>{memberDirectory?'本院年级负责人':title}</h1><p>{memberDirectory?'查看本院年级负责人的账号、负责年级和使用状态。':readOnlyRoster?'仅查看负责年级的学生；名单由院负责人或管理员维护。':description}</p></div></header>
   {context&&<div className="task-context">{context}</div>}
   <div className="task-content">{children}</div>
  </main>;
