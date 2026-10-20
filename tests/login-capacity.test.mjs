@@ -13,5 +13,12 @@ test('serial password checks are rate limited even when concurrent work stays at
 test('slow checks are bounded and release is idempotent',()=>{
  let now=0;const acquire=createLoginAdmission(()=>now),slots=[];
  for(let i=0;i<6;i++){slots.push(acquire());assert.ok(slots.at(-1));now+=1000;}
- assert.equal(acquire(),null);slots[0]();slots[0]();assert.ok(acquire());assert.equal(acquire(),null);
+ assert.equal(acquire(),null);slots[0]();slots[0]();now+=1000;assert.ok(acquire());assert.equal(acquire(),null);
+});
+
+test('slow serial password verification leaves a cooldown even after rate tokens have replenished',()=>{
+ let now=0;const acquire=createLoginAdmission(()=>now),release=acquire();assert.ok(release);
+ now=900;release();
+ for(let i=0;i<200;i++)assert.equal(acquire(),null,'queued requests must be rejected before another slow verification');
+ now=1200;assert.ok(acquire());
 });

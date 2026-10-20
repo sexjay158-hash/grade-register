@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {requestJson,loginWithWaiting,readBrowserPreference,saveBrowserPreference} from '../lib/browser-request.ts';
+import {requestJson,requestPhoto,loginWithWaiting,readBrowserPreference,saveBrowserPreference} from '../lib/browser-request.ts';
 
 test('blocked storage and server rendering do not interrupt startup',()=>{
  const original=Object.getOwnPropertyDescriptor(globalThis,'window');
@@ -61,5 +61,18 @@ test('login waits only on explicit admission rejection, with a bounded and cance
   await assert.rejects(loginWithWaiting({username:'test',password:'test'},()=>{},undefined,{maxWaitMs:1,retryDelay:()=>10}),/请稍后再次登录/);
   const controller=new AbortController();
   await assert.rejects(loginWithWaiting({username:'test',password:'test'},()=>controller.abort(),controller.signal,{retryDelay:()=>100}),/已取消/);
+ }finally{globalThis.fetch=original;}
+});
+
+
+test('photo reads bound body downloads and never retry a permission failure',async()=>{
+ const original=globalThis.fetch;let calls=0;
+ try{
+  globalThis.fetch=async()=>{calls++;return new Response('denied',{status:403});};
+  await assert.rejects(requestPhoto('/api/photo/test'),e=>e.status===403);assert.equal(calls,1);
+  calls=0;globalThis.fetch=async(path,{signal})=>{calls++;return {ok:true,status:200,blob:()=>new Promise((resolve,reject)=>signal.addEventListener('abort',()=>reject(new DOMException('Aborted','AbortError')),{once:true}))};};
+  await assert.rejects(requestPhoto('/api/photo/test',10),/读取超时/);assert.equal(calls,2);
+  globalThis.fetch=async()=>new Response(new Uint8Array([137,80,78]),{headers:{'Content-Type':'image/png'}});
+  assert.equal((await requestPhoto('/api/photo/test')).size,3);
  }finally{globalThis.fetch=original;}
 });

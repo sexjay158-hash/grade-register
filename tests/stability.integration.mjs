@@ -36,7 +36,7 @@ async function pool(total,concurrency,work){let next=0;const results=new Array(t
 function save(){
  const dir=process.env.LOAD_REPORT_DIR;fs.mkdirSync(dir,{recursive:true});
  fs.writeFileSync(path.join(dir,'stability.json'),JSON.stringify(report,null,2)+'\n');
- const lines=['# 稳定性与 200 人测试（2026-10-20）','',report.environment,'','| 场景 | 成功/请求 | P95(ms) | 最大(ms) |','|---|---:|---:|---:|',...report.results.map(r=>`| ${r.name} | ${r.successes}/${r.requests} | ${r.p95Ms} | ${r.maxMs} |`),'','## 校验','',...report.checks.map(s=>'- '+s),'','## 测试边界','','在线测试为 200 个有效会话，每人 3 轮读取身份、学期及本院状态，初次进入分散在 12 秒内，每轮之间停顿 10–14 秒（比页面正常 45–60 秒刷新更频繁）。集中登录同时调用真实前端等待逻辑：仅服务器明确返回 LOGIN_BUSY 时，间隔 3–6 秒重试，最长等待 120 秒；其他错误和超时不重试。密码保留 600000 次 PBKDF2。登录期间每秒读取一次已有会话状态以检查可用性。','', '这是本机短时测试，不是公网或长期容量承诺，也没有测试手机端 OCR 或 200 人每人连续上传 30 张。'];
+ const lines=['# 稳定性与 200 人测试（2026-10-20）','',report.environment,'','| 场景 | 成功/请求 | P95(ms) | 最大(ms) |','|---|---:|---:|---:|',...report.results.map(r=>`| ${r.name} | ${r.successes}/${r.requests} | ${r.p95Ms} | ${r.maxMs} |`),'','## 校验','',...report.checks.map(s=>'- '+s),'','## 测试边界','','在线测试为 200 个有效会话，每人 3 轮读取身份、学期及本院状态，初次进入分散在 12 秒内，每轮之间停顿 10–14 秒（比页面正常 45–60 秒刷新更频繁）。集中登录同时调用真实前端等待逻辑：仅服务器明确返回 LOGIN_BUSY 时，首次间隔 3–6 秒、持续繁忙后最长间隔 15–30 秒重试，最长等待 300 秒；其他错误和超时不重试。密码保留 600000 次 PBKDF2。登录期间每秒读取一次已有会话状态以检查可用性。','', '这是本机短时测试，不是公网或长期容量承诺，也没有测试手机端 OCR 或 200 人每人连续上传 30 张。'];
  if(report.notes)lines.push('',...report.notes.map(s=>'- '+s));
  if(report.failure)lines.push('','测试失败：'+report.failure);
  fs.writeFileSync(path.join(dir,'stability.md'),lines.join('\n')+'\n');
@@ -62,6 +62,10 @@ try{
   const start=performance.now(),headers=new Headers(init.headers);headers.set('Origin',origin);
   const response=await originalFetch(new URL(url,origin),{...init,headers});
   loginHttp.push({status:response.status,ms:performance.now()-start});
+  if(response.status>=500&&!(response.headers.get('content-type')??'').includes('json')){
+   report.unexpectedLoginResponses??=[];
+   if(report.unexpectedLoginResponses.length<5)report.unexpectedLoginResponses.push((await response.clone().text()).slice(0,500));
+  }
   if(response.ok){const name=JSON.parse(init.body).username;cookieByUser.set(name,response.headers.get('set-cookie')?.split(';')[0]);}
   return response;
  };

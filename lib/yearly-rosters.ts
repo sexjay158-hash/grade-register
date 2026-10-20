@@ -30,7 +30,7 @@ async function ensureYearlyRosterUncached(owner:string){
   d.prepare('INSERT OR IGNORE INTO roster_students(owner,year_id,sid,name,college,group_id,position,active) SELECT owner,?,sid,name,college,group_id,position,1 FROM students WHERE owner=?').bind(id,owner),
   d.prepare('INSERT OR IGNORE INTO roster_intakes(intake_id,owner,year_id) SELECT id,owner,? FROM intake WHERE owner=?').bind(id,owner)
  ]);}
- if(FEATURES.concurrentQueries)await initializeOnce('query-indexes',initializeQueryIndexes);
+ if(FEATURES.concurrentQueries||FEATURES.atomicMutations)await initializeOnce('query-indexes',initializeQueryIndexes);
  return id;
 }
 export async function requireYear(owner:string,yearId:unknown){

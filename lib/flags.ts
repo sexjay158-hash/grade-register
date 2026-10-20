@@ -45,6 +45,8 @@ export const FEATURES = {
  concurrentQueries: true,
  // Disable to restore the previous login admission and 20-second refresh baseline.
  stabilityProtection: true,
+ // Restore legacy write paths only as part of a deliberate source rollback.
+ atomicMutations: true,
  resilientLogin: true,
  memberAccountManagement: true,
  collegeStaffDirectory: true,

@@ -25,7 +25,7 @@ export async function POST(req:Request){
   const account=await findAccount(username);
   if(!await verifyPassword(password,account)||!account?.active){await recordLoginFailure(limit.key);return Response.json({error:'账号或密码不正确'},{status:401,headers:{'Cache-Control':'no-store'}});}
   await clearLoginFailures(limit.key);
-  return Response.json({ok:true,role:account.role},{headers:{'Set-Cookie':await newSession(account.id,req),'Cache-Control':'no-store'}});
+  return Response.json({ok:true,role:account.role},{headers:{'Set-Cookie':await newSession(account.id,req,account),'Cache-Control':'no-store'}});
  }catch{return Response.json({error:'登录服务暂不可用，请稍后重试'},{status:503,headers});}
  finally{try{if(release)await release();}catch{console.error('Login verification lease cleanup failed');}finally{releaseInstance?.();}}
 }

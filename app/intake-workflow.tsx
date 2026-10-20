@@ -1,5 +1,5 @@
 "use client";
-import {requestJson} from '@/lib/browser-request';
+import {requestJson,requestPhoto} from '@/lib/browser-request';
 import {studentNumber} from '@/lib/student-number';
 import {usePhotoUploadReview} from './photo-upload-review';
 import {Fragment,useRef,useState} from 'react';
@@ -60,7 +60,7 @@ export function PreviewPanel({readOnly=false,mode='all',groups,students,intake,i
  const eventMap=new Map(visibleEvents.map(e=>[e.group_id+'|'+e.number,e])),max=Math.max(5,...visibleEvents.map(e=>e.number));
  const shown=students.filter(s=>(groupFilter==='all'||s.group_id===groupFilter)&&((studentNumber(s)+s.name+(groups.find(g=>g.id===s.group_id)?.name??'')).includes(query)));
  const pageCount=Math.max(1,Math.ceil(shown.length/100)),activePage=Math.min(page,pageCount),pageRows=shown.slice((activePage-1)*100,activePage*100);
- async function process(id:string){if(busy)return;setBusy(id);try{const retryStored=intake.find(p=>p.id===id)?.error.includes('上次未确认')??false;let recognized:{lines:string[];ratingText:string}|undefined;if(provider!=='baidu'){if(provider==='local'&&!await checkRapidOcr())throw new Error('请先启动本机 RapidOCR');const photo=await fetch('/api/intake/photo/'+id);if(!photo.ok)throw new Error('无法读取照片');const blob=await photo.blob();recognized=await (provider==='browser'?recognizeBrowserPhotoDetails(blob):recognizeLocalPhotoDetails(blob));}const r=await api('intake/process',json({id,retryStored,...(provider!=='baidu'?{recognizedLines:recognized?.lines,recognizedRatingText:recognized?.ratingText}:{apiKey:keyValue,secretKey:secret})}));await load();if(r.status==='assigned')toast.success(`已匹配 ${r.groupCount??1} 个小组、填入 ${r.matched} 条成绩${r.rating?'，等次和折算分已更新':'；请核对活动等次'}`);else toast.info(r.error||r.reason||'没有识别出明确的学生和成绩，请把照片拍清楚后重试');}catch(e){toast.error((e as Error).message);}finally{setBusy('');}}
+ async function process(id:string){if(busy)return;setBusy(id);try{const retryStored=intake.find(p=>p.id===id)?.error.includes('上次未确认')??false;let recognized:{lines:string[];ratingText:string}|undefined;if(provider!=='baidu'){if(provider==='local'&&!await checkRapidOcr())throw new Error('请先启动本机 RapidOCR');const blob=await requestPhoto('/api/intake/photo/'+id);recognized=await (provider==='browser'?recognizeBrowserPhotoDetails(blob):recognizeLocalPhotoDetails(blob));}const r=await api('intake/process',json({id,retryStored,...(provider!=='baidu'?{recognizedLines:recognized?.lines,recognizedRatingText:recognized?.ratingText}:{apiKey:keyValue,secretKey:secret})}));await load();if(r.status==='assigned')toast.success(`已匹配 ${r.groupCount??1} 个小组、填入 ${r.matched} 条成绩${r.rating?'，等次和折算分已更新':'；请核对活动等次'}`);else toast.info(r.error||r.reason||'没有识别出明确的学生和成绩，请把照片拍清楚后重试');}catch(e){toast.error((e as Error).message);}finally{setBusy('');}}
  async function deletePhoto(id:string){
   if(busy)return false;setBusy('delete:'+id);
   try{const result=await api('intake',{method:'DELETE',headers:{'Content-Type':'application/json'},body:JSON.stringify({id})});

@@ -1,3 +1,4 @@
+import {storeSession,replacePassword} from './session-store';
 import {env} from 'cloudflare:workers';
 import {PASSWORD_MIN_LENGTH} from './password-policy';
 
@@ -28,6 +29,7 @@ export async function ensureLocalAuth(){
    created TEXT NOT NULL, expires TEXT NOT NULL
   )`).run();
   await database().prepare('CREATE INDEX IF NOT EXISTS local_sessions_account ON local_sessions(account_id)').run();
+  await database().prepare('CREATE INDEX IF NOT EXISTS local_sessions_expiry ON local_sessions(expires)').run();
   await database().prepare(`CREATE TABLE IF NOT EXISTS local_login_attempts (
    attempt_key TEXT PRIMARY KEY, attempts INTEGER NOT NULL, expires TEXT NOT NULL
   )`).run();
@@ -82,9 +84,9 @@ export async function accountFromCookie(cookieHeader:string){
   .bind(await sha256(token),new Date().toISOString()).first<LocalAccount>();
 }
 export async function accountFromRequest(req:Request){return accountFromCookie(req.headers.get('cookie')??'');}
-export async function newSession(accountId:string,req:Request){
+export async function newSession(accountId:string,req:Request,expected?:Pick<StoredAccount,'username'|'password_hash'>){
  await ensureLocalAuth();const token=randomHex(32),t=new Date(),expires=new Date(t.getTime()+SESSION_SECONDS*1000).toISOString();
- await database().prepare('INSERT INTO local_sessions(token_hash,account_id,created,expires) VALUES(?,?,?,?)').bind(await sha256(token),accountId,t.toISOString(),expires).run();
+ await storeSession(database(),{tokenHash:await sha256(token),accountId,created:t.toISOString(),expires},expected);
  const secure=new URL(req.url).protocol==='https:'?'; Secure':'';
  return `${COOKIE}=${token}; Path=/; HttpOnly; SameSite=Strict; Max-Age=${SESSION_SECONDS}${secure}`;
 }
@@ -109,8 +111,8 @@ export async function recordLoginFailure(key:string){const expiry=new Date(Date.
  .bind(key,expiry,now,now,expiry).run();
 }
 export async function clearLoginFailures(key:string){await database().prepare('DELETE FROM local_login_attempts WHERE attempt_key=?').bind(key).run();}
-export async function updatePassword(accountId:string,password:string){const p=await passwordRecord(password),t=new Date().toISOString();
- await database().prepare('UPDATE local_accounts SET password_hash=?,salt=?,iterations=?,updated=? WHERE id=?').bind(p.password_hash,p.salt,p.iterations,t,accountId).run();
- await revokeAccountSessions(accountId);
+export async function updatePassword(accountId:string,password:string,expectedHash?:string){
+ const p=await passwordRecord(password);await replacePassword(database(),accountId,p,new Date().toISOString(),expectedHash);return p;
 }
+
 export {ADMIN_ID};

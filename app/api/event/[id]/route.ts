@@ -1,3 +1,4 @@
+import {guardedBatch,writableGroupGuard,accountWriteGuard} from '@/lib/guarded-batch';
 import {db,bucket,access,requireEditor,json,failure,getEvent,now} from '@/lib/server';
 import {readBody} from '@/lib/server';
 import {validateScores} from '@/lib/domain';
@@ -26,11 +27,11 @@ export async function PUT(req:Request,{params}:{params:Promise<{id:string}>}){tr
   if(!FEATURES.activityRating)throw new Error('活动等次功能已关闭');
   const rating=requireActivityRating(body.rating),previous=await d.prepare('SELECT rating FROM event_ratings WHERE event_id=? AND owner=?').bind(id,u).first<{rating:string}>();
   const token=crypto.randomUUID(),t=now(),guard='EXISTS (SELECT 1 FROM events WHERE id=? AND owner=? AND token=?)';
-  const result=await d.batch([
+  const result=await guardedBatch(d,[
    d.prepare('UPDATE events SET version=version+1,token=?,updated=? WHERE id=? AND owner=? AND version=?').bind(token,t,id,u,body.version),
    d.prepare(`INSERT INTO event_ratings(event_id,owner,rating,updated) SELECT ?,?,?,? WHERE ${guard} ON CONFLICT(event_id) DO UPDATE SET rating=excluded.rating,updated=excluded.updated`).bind(id,u,rating,t,id,u,token),
    d.prepare(`INSERT INTO audit(id,owner,event_id,action,payload,created) SELECT ?,?,?,?,?,? WHERE ${guard}`).bind(crypto.randomUUID(),u,id,'rate',JSON.stringify({actorEmail:a.email,previousRating:previous?.rating??null,rating}),t,id,u,token)
-  ]);
+  ],[writableGroupGuard(u,event.group_id,a),accountWriteGuard(a)]);
   if(!result[0].meta.changes)throw new Error('活动已被更新，请重新打开后操作');
   return json({version:event.version+1,status:event.status,rating});
  }
@@ -47,7 +48,7 @@ export async function PUT(req:Request,{params}:{params:Promise<{id:string}>}){tr
  if(body.action!=='reopen')queries.push(d.prepare(`INSERT INTO scores(event_id,sid,score,state,note) SELECT ?,json_extract(value,'$.sid'),json_extract(value,'$.score'),json_extract(value,'$.state'),json_extract(value,'$.note') FROM json_each(?) WHERE ${guard} ON CONFLICT(event_id,sid) DO UPDATE SET score=excluded.score,state=excluded.state,note=excluded.note`).bind(id,JSON.stringify(rows),id,u,token));
  if(FEATURES.activityRating&&body.action!=='reopen'&&body.rating!==undefined){const rating=requireActivityRating(body.rating);queries.push(d.prepare(`INSERT INTO event_ratings(event_id,owner,rating,updated) SELECT ?,?,?,? WHERE ${guard} ON CONFLICT(event_id) DO UPDATE SET rating=excluded.rating,updated=excluded.updated`).bind(id,u,rating,t,id,u,token));}
  queries.push(d.prepare(`INSERT INTO audit(id,owner,event_id,action,payload,created) SELECT ?,?,?,?,?,? WHERE ${guard}`).bind(crypto.randomUUID(),u,id,body.action,JSON.stringify({actorEmail:a.email,previous:previous.results,previousStatus:event.status,rows}),t,id,u,token));
- const result=await d.batch(queries);if(!result[0].meta.changes)throw new Error('活动已被更新，请重新打开后操作');return json({version:v,status});
+ const result=await guardedBatch(d,queries,[writableGroupGuard(u,event.group_id,a),accountWriteGuard(a)]);if(!result[0].meta.changes)throw new Error('活动已被更新，请重新打开后操作');return json({version:v,status});
 }catch(e){return failure(e);}}
 
 export async function PATCH(req:Request,{params}:{params:Promise<{id:string}>}){try{
@@ -62,11 +63,11 @@ export async function PATCH(req:Request,{params}:{params:Promise<{id:string}>}){
   (await d.prepare('SELECT sid FROM roster_students WHERE owner=? AND group_id=? AND active=1').bind(u,event.group_id).all<{sid:string}>()).results.map(s=>s.sid))[0];
  const previous=await d.prepare('SELECT sid,score,state,note FROM scores WHERE event_id=? AND sid=?').bind(id,row.sid).first();
  const token=crypto.randomUUID(),t=now(),guard='EXISTS (SELECT 1 FROM events WHERE id=? AND owner=? AND token=?)';
- const result=await d.batch([
+ const result=await guardedBatch(d,[
   d.prepare('UPDATE events SET version=version+1,token=?,updated=? WHERE id=? AND owner=? AND version=?').bind(token,t,id,u,body.version),
   clearing?d.prepare(`DELETE FROM scores WHERE event_id=? AND sid=? AND ${guard}`).bind(id,row.sid,id,u,token):d.prepare(`INSERT INTO scores(event_id,sid,score,state,note) SELECT ?,?,?,?,? WHERE ${guard} ON CONFLICT(event_id,sid) DO UPDATE SET score=excluded.score,state=excluded.state,note=excluded.note`).bind(id,row.sid,row.score,row.state,row.note,id,u,token),
   d.prepare(`INSERT INTO audit(id,owner,event_id,action,payload,created) SELECT ?,?,?,?,?,? WHERE ${guard}`).bind(crypto.randomUUID(),u,id,clearing?'clear_score':'adjust',JSON.stringify({actorEmail:a.email,previous,row,previousStatus:event.status}),t,id,u,token)
- ]);
+ ],[writableGroupGuard(u,event.group_id,a),accountWriteGuard(a)]);
  if(!result[0].meta.changes||(!clearing&&!result[1].meta.changes))throw new Error('活动已被更新，请刷新总表后再修改');
  return json({version:event.version+1,status:event.status,sid:row.sid,score:row.score,state:row.state,cleared:clearing});
 }catch(e){return failure(e);}}
@@ -84,7 +85,7 @@ export async function DELETE(req:Request,{params}:{params:Promise<{id:string}>})
   d.prepare('SELECT intake_id AS id FROM intake_event_links WHERE event_id=? AND owner=?').bind(id,u)
  ]),intakeIds=[...new Set([...intakeRows.results,...linkRows.results].map(r=>String((r as {id:string}).id)))],photoIds=[...new Set([...photoRows.results,...intakeRows.results,...linkRows.results].map(r=>String((r as {id:string}).id)))];
  const token=crypto.randomUUID(),guard='EXISTS (SELECT 1 FROM events WHERE id=? AND owner=? AND token=?)';
- const result=await d.batch([
+ const result=await guardedBatch(d,[
   // Reserve number 0 while later activities move down without hitting the unique group/number index.
   d.prepare('UPDATE events SET token=?,version=version+1,number=0 WHERE id=? AND owner=? AND version=? AND status=?').bind(token,id,u,body.version,event.status),
   d.prepare(`DELETE FROM scores WHERE event_id=? AND ${guard}`).bind(id,id,u,token),
@@ -98,7 +99,7 @@ export async function DELETE(req:Request,{params}:{params:Promise<{id:string}>})
   d.prepare(`UPDATE events SET number=-number,version=version+1 WHERE owner=? AND group_id=? AND number>? AND ${guard}`).bind(u,event.group_id,event.number,id,u,token),
   d.prepare(`UPDATE events SET number=-number-1 WHERE owner=? AND group_id=? AND number<0 AND ${guard}`).bind(u,event.group_id,id,u,token),
   d.prepare('DELETE FROM events WHERE id=? AND owner=? AND token=?').bind(id,u,token)
- ]);
+ ],[writableGroupGuard(u,event.group_id,a),accountWriteGuard(a)]);
  if(!result[0].meta.changes||!result[result.length-1].meta.changes)throw new Error('活动已被更新，请刷新后重试');
  const stillStored=photoIds.length?await d.prepare('SELECT id FROM intake WHERE owner=? AND id IN (SELECT value FROM json_each(?)) UNION SELECT id FROM photos WHERE owner=? AND id IN (SELECT value FROM json_each(?))').bind(u,JSON.stringify(photoIds),u,JSON.stringify(photoIds)).all<{id:string}>():{results:[]};
  const retained=new Set(stillStored.results.map(row=>row.id));

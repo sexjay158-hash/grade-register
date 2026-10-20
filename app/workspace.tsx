@@ -15,7 +15,7 @@ import {Button} from '@/components/ui/button';
 import {Input} from '@/components/ui/input';
 import {Toaster} from '@/components/ui/sonner';
 import {toast} from 'sonner';
-import {requestJson,readBrowserPreference,saveBrowserPreference} from '@/lib/browser-request';
+import {requestJson,requestPhoto,readBrowserPreference,saveBrowserPreference} from '@/lib/browser-request';
 import {scheduleRefresh} from '@/lib/refresh-scheduler';
 import {WorkspaceStartup} from './workspace-startup';
 import {type Student,type Score,validateRoster} from '@/lib/domain';
@@ -133,12 +133,12 @@ export default function Workspace(){
  function updateRating(rating:ActivityRating){setDraft(d=>d?{...d,event:{...d.event,rating}}:d);setDirty(true);}
  async function save(action:string){await run(action,async()=>{if(!draft)return;await api('event/'+draft.event.id,body({action,version:draft.event.version,rows:draft.scores,...(canSetRating&&action!=='reopen'&&FEATURES.activityRating&&draft.event.rating?{rating:draft.event.rating}:{})},'PUT'));await openEvent(draft.event.id);await load();setConfirm('');toast.success(action==='commit'?'本次活动成绩已登记':action==='rate'?'活动等次和折算分已更新':action==='reopen'?'已撤回，可补传照片或修改成绩':'草稿已保存');});}
  async function removeActivity(){await run('delete',async()=>{if(!draft)return;const wasCommitted=draft.event.status==='committed',result=await api('event/'+draft.event.id,body({version:draft.event.version},'DELETE'));setDirty(false);setConfirm('');setDraft(null);await load();toast.success(wasCommitted?'活动已删除，成绩、统计和后续活动序号已同步':'草稿已删除，关联数据和后续活动序号已同步');if(result.photoCleanupFailed)toast.warning(`${result.photoCleanupFailed} 张照片的存储清理未完成，请稍后联系管理员`);});}
- async function logout(){try{const response=await fetch('/api/auth/logout',{method:'POST'});if(!response.ok)throw new Error('退出失败');window.location.assign('/login');}catch(e){toast.error((e as Error).message);}}
+ async function logout(){try{await requestJson('/api/auth/logout',{method:'POST'});window.location.assign('/login');}catch(e){toast.error((e as Error).message);}}
  function combineRecognized(existing:Score[],recognized:Score[]){const rows=new Map(existing.map(r=>[r.sid,r])),conflicts:string[]=[];for(const r of recognized){const old=rows.get(r.sid);if(old&&old.state!=='unrecorded'&&(old.score!==r.score||old.state!==r.state))conflicts.push(r.sid);else rows.set(r.sid,r);}return {rows:[...rows.values()],conflicts};}
  async function recognizeAndSave(photoIds:string[],localFiles?:Map<string,Blob>){
   if(!draft)return {matched:0,unresolved:0,rating:null as ActivityRating|null,ratingConflict:false};
   const results:{matched:Score[];unresolved:string[];ratingText?:string}[]=[];
-  for(const photoId of photoIds){let recognized:{lines:string[];ratingText:string}|undefined;if(provider!=='baidu'){let photo=localFiles?.get(photoId);if(!photo){const response=await fetch('/api/photo/'+photoId);if(!response.ok)throw new Error('无法读取照片');photo=await response.blob();}recognized=await (provider==='browser'?recognizeBrowserPhotoDetails(photo):recognizeLocalPhotoDetails(photo));}results.push(await api('ocr',body({eventId:draft.event.id,photoId,...(provider!=='baidu'?{recognizedLines:recognized?.lines,recognizedRatingText:recognized?.ratingText}:{apiKey:key,secretKey:secret})})));}
+  for(const photoId of photoIds){let recognized:{lines:string[];ratingText:string}|undefined;if(provider!=='baidu'){let photo=localFiles?.get(photoId);if(!photo){photo=await requestPhoto('/api/photo/'+photoId);}recognized=await (provider==='browser'?recognizeBrowserPhotoDetails(photo):recognizeLocalPhotoDetails(photo));}results.push(await api('ocr',body({eventId:draft.event.id,photoId,...(provider!=='baidu'?{recognizedLines:recognized?.lines,recognizedRatingText:recognized?.ratingText}:{apiKey:key,secretKey:secret})})));}
   const fresh:Draft=await api('event/'+draft.event.id),combined=combineRecognized(fresh.scores,results.flatMap(r=>r.matched)),unresolved=results.reduce((n,r)=>n+r.unresolved.length,0)+combined.conflicts.length;
   const choices=new Set(FEATURES.photoRatingRecognition&&canSetRating?results.map(r=>ratingFromPhotoText(r.ratingText)).filter((r):r is ActivityRating=>r!==null):[]),rating=choices.size===1?[...choices][0]:null,ratingConflict=choices.size>1||!!(rating&&fresh.event.rating&&fresh.event.rating!==rating);
   await api('event/'+draft.event.id,body({action:'save',version:fresh.event.version,rows:combined.rows,...(rating&&!fresh.event.rating?{rating}:{})},'PUT'));

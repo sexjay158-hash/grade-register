@@ -8,7 +8,8 @@ import './photo-upload-review.css';
 
 // Keep selections in the browser until the user explicitly confirms them.
 export function usePhotoUploadReview(scope:string,upload:(files:File[])=>Promise<File[]>,disabled:boolean){
- const [files,setFiles]=useState<File[]>([]),[confirming,setConfirming]=useState(false),inFlight=useRef(false);
+ const [files,setFiles]=useState<File[]>([]),[confirming,setConfirming]=useState(false),inFlight=useRef(false),currentScope=useRef(scope);
+ currentScope.current=scope;
  useEffect(()=>{setFiles([]);},[scope]);
  function selectPhotos(selected:FileList|null){
   if(!selected?.length||disabled||inFlight.current)return;
@@ -20,8 +21,8 @@ export function usePhotoUploadReview(scope:string,upload:(files:File[])=>Promise
  }
  async function confirm(){
   if(!files.length||disabled||inFlight.current)return;
-  inFlight.current=true;setConfirming(true);
-  try{setFiles(await upload(files));}catch(e){toast.error((e as Error).message);}finally{inFlight.current=false;setConfirming(false);}
+  const startedScope=scope;inFlight.current=true;setConfirming(true);
+  try{const remaining=await upload(files);if(currentScope.current===startedScope)setFiles(remaining);}catch(e){toast.error((e as Error).message);}finally{inFlight.current=false;setConfirming(false);}
  }
  return {selectPhotos,busy:confirming,review:FEATURES.photoUploadReview&&files.length>0?<PhotoUploadReview files={files} busy={disabled||confirming} onChange={setFiles} onConfirm={confirm}/>:null};
 }

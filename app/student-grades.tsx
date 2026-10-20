@@ -1,7 +1,7 @@
 "use client";
 import {requestJson} from '@/lib/browser-request';
 import {studentNumber} from '@/lib/student-number';
-import {useEffect,useState} from 'react';
+import {useEffect,useRef,useState} from 'react';
 import {Button} from '@/components/ui/button';
 import {Input} from '@/components/ui/input';
 import {Dialog,DialogContent,DialogHeader,DialogTitle,DialogDescription} from '@/components/ui/dialog';
@@ -14,10 +14,18 @@ const labels:Record<string,string>={scored:'有成绩',absent:'缺席',excused:'
 async function request(path:string,value?:unknown,method='POST'):Promise<any>{return requestJson('/api/'+path,value?{method,headers:{'Content-Type':'application/json'},body:JSON.stringify(value)}:undefined);}
 
 export function StudentGrades({student,yearId,readOnly,onClose,onChanged}:{student:Student;yearId:string;readOnly:boolean;onClose:()=>void;onChanged:()=>Promise<void>}){
+ const scope=yearId+'|'+student.sid,currentScope=useRef(scope),generation=useRef(0);currentScope.current=scope;
  const [events,setEvents]=useState<Activity[]>([]),[canCreate,setCanCreate]=useState(false),[loading,setLoading]=useState(true),[busy,setBusy]=useState(false),[error,setError]=useState('');
  const [editing,setEditing]=useState<Activity|'new'|null>(null),[state,setState]=useState('scored'),[score,setScore]=useState(''),[date,setDate]=useState(()=>new Date().toLocaleDateString('en-CA'));
- async function load(){setLoading(true);try{const data=await request('student-grades?yearId='+encodeURIComponent(yearId)+'&sid='+encodeURIComponent(student.sid));setEvents(data.events);setCanCreate(data.canCreate);setError('');}catch(e){setError((e as Error).message);setEvents([]);setCanCreate(false);}finally{setLoading(false);}}
- useEffect(()=>{void load();},[student.sid,yearId]);
+ async function load(signal?:AbortSignal){
+  const own=++generation.current;setLoading(true);
+  const current=()=>own===generation.current&&scope===currentScope.current&&!signal?.aborted;
+  try{const data:any=await requestJson('/api/student-grades?yearId='+encodeURIComponent(yearId)+'&sid='+encodeURIComponent(student.sid),{signal});if(!current())return;setEvents(data.events);setCanCreate(data.canCreate);setError('');}
+  catch(e){if(current()){setError((e as Error).message);setEvents([]);setCanCreate(false);}}
+  finally{if(current())setLoading(false);}
+ }
+ useEffect(()=>{const controller=new AbortController();setEditing(null);setEvents([]);setCanCreate(false);void load(controller.signal);return()=>controller.abort();},[student.sid,yearId]);
+
  function edit(event:Activity|'new'){setEditing(event);setState(event==='new'?'scored':event.state==='unrecorded'?'scored':event.state);setScore(event==='new'?'':String(event.score??''));}
  async function save(){if(!editing||busy)return;setBusy(true);try{
   let target:Activity|{id:string;version:number};

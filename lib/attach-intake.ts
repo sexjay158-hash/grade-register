@@ -1,3 +1,4 @@
+import {guardedBatch,writableYearGuard,writableGroupGuard,accountWriteGuard,type WriteGuard} from './guarded-batch';
 import {db,now,type Access} from '@/lib/server';
 import {matchLines} from '@/lib/domain';
 import {yearForIntake} from '@/lib/yearly-rosters';
@@ -17,8 +18,8 @@ export async function attachIntake(user:string,id:string,groupId:string,a?:Acces
  const event=await d.prepare("SELECT * FROM events WHERE owner=? AND group_id=? AND status='draft'").bind(user,groupId).first<any>();
  if(event&&FEATURES.photoActivityDateGuard&&event.date!==photo.date){const reason='活动日期与该组未确认草稿不同，请核对日期；同次活动的多张表请使用相同日期';await d.prepare("UPDATE intake SET status='needs_review',error=? WHERE id=? AND owner=?").bind(reason,id,user).run();return {blocked:true,error:reason};}
  if(event&&!FEATURES.continuousPhotoUpload&&event.batch_id!==photo.batch_id){await d.prepare("UPDATE intake SET status='needs_review',error=? WHERE id=? AND owner=?").bind('该组还有上次未确认的活动草稿；完成后再处理这张照片',id,user).run();return {blocked:true,error:'该组还有上次未确认的活动草稿'};}
- let eventId=event?.id;
- if(!eventId){eventId=crypto.randomUUID();const t=now();await d.prepare("INSERT INTO events(id,owner,group_id,number,date,status,batch_id,created,updated) SELECT ?,?,?,COALESCE(MAX(number),0)+1,?,'draft',?,?,? FROM events WHERE owner=? AND group_id=?").bind(eventId,user,groupId,photo.date,photo.batch_id,t,t,user,groupId).run();}
+ let eventId=event?.id;const create=!eventId;
+ if(create)eventId=crypto.randomUUID();
  const previous=await d.prepare('SELECT sid,score,state FROM scores WHERE event_id=?').bind(eventId).all<any>(),prev=new Map(previous.results.map(s=>[s.sid,s]));
  const conflicts=parsed.matched.filter(s=>prev.has(s.sid)&&prev.get(s.sid).state!=='unrecorded'&&(prev.get(s.sid).score!==s.score||prev.get(s.sid).state!==s.state));
  const writeable=parsed.matched.filter(s=>!prev.has(s.sid)||prev.get(s.sid).state==='unrecorded'),issues=parsed.unresolved.length+conflicts.length;
@@ -29,6 +30,8 @@ export async function attachIntake(user:string,id:string,groupId:string,a?:Acces
   d.prepare('UPDATE events SET version=version+1,updated=? WHERE id=? AND owner=?').bind(now(),eventId,user)
  ];
  queries.push(d.prepare('INSERT INTO audit(id,owner,event_id,action,payload,created) VALUES(?,?,?,?,?,?)').bind(crypto.randomUUID(),user,eventId,'recognize',JSON.stringify({actorEmail:a?.email,photoId:id,rows:writeable}),now()));
- const result=await d.batch(queries);if(!result[2].meta.changes)throw new Error('照片已被处理，请刷新页面');
+ if(create){const t=now();queries.unshift(d.prepare("INSERT INTO events(id,owner,group_id,number,date,status,batch_id,created,updated) SELECT ?,?,?,COALESCE(MAX(number),0)+1,?,'draft',?,?,? FROM events WHERE owner=? AND group_id=?").bind(eventId,user,groupId,photo.date,photo.batch_id,t,t,user,groupId));}
+ const checks:WriteGuard[]=[writableYearGuard(user,yearId),writableGroupGuard(user,groupId,a),{sql:"EXISTS(SELECT 1 FROM intake WHERE id=? AND owner=? AND status<>'assigned' AND lines IS ?)",values:[id,user,photo.lines]},event?{sql:"EXISTS(SELECT 1 FROM events WHERE id=? AND owner=? AND status='draft' AND version=?)",values:[eventId,user,event.version]}:{sql:"NOT EXISTS(SELECT 1 FROM events WHERE owner=? AND group_id=? AND status='draft')",values:[user,groupId]}];if(a)checks.push(accountWriteGuard(a));
+ const result=await guardedBatch(d,queries,checks,'照片或活动已变化，请刷新后重新识别；本次未写入成绩');if(!result[create?3:2].meta.changes)throw new Error('照片已被处理，请刷新页面');
  return {eventId,matched:writeable.length,unresolved:issues,groupId};
 }

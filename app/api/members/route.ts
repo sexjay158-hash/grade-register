@@ -1,3 +1,4 @@
+import {updateAccountAndRevoke} from '@/lib/session-store';
 import {access,db,json,failure,readBody,requireAdmin,now} from '@/lib/server';
 import {FEATURES} from '@/lib/flags';
 import {findAccount,normalizeUsername,passwordRecord,revokeAccountSessions,validatePassword} from '@/lib/local-auth';
@@ -27,12 +28,11 @@ export async function POST(req:Request){
   const password=String(input.password??'');
   if(!existing||!existing.active){
    const p=await passwordRecord(validatePassword(password,username));
-   if(existing){await db().prepare('UPDATE local_accounts SET password_hash=?,salt=?,iterations=?,role=?,college=?,cohort=?,active=1,updated=? WHERE id=?').bind(p.password_hash,p.salt,p.iterations,role,college,cohort,t,existing.id).run();await revokeAccountSessions(existing.id);}
+   if(existing){await updateAccountAndRevoke(db(),existing.id,db().prepare('UPDATE local_accounts SET password_hash=?,salt=?,iterations=?,role=?,college=?,cohort=?,active=1,updated=? WHERE id=?').bind(p.password_hash,p.salt,p.iterations,role,college,cohort,t,existing.id));}
    else await db().prepare('INSERT INTO local_accounts(id,username,password_hash,salt,iterations,role,college,cohort,active,created,updated) VALUES(?,?,?,?,?,?,?,?,1,?,?)').bind(crypto.randomUUID(),username,p.password_hash,p.salt,p.iterations,role,college,cohort,t,t).run();
   }else{
-   if(password){const p=await passwordRecord(validatePassword(password,username));await db().prepare('UPDATE local_accounts SET password_hash=?,salt=?,iterations=?,role=?,college=?,cohort=?,updated=? WHERE id=?').bind(p.password_hash,p.salt,p.iterations,role,college,cohort,t,existing.id).run();}
-   else await db().prepare('UPDATE local_accounts SET role=?,college=?,cohort=?,updated=? WHERE id=?').bind(role,college,cohort,t,existing.id).run();
-   await revokeAccountSessions(existing.id);
+   if(password){const p=await passwordRecord(validatePassword(password,username));await updateAccountAndRevoke(db(),existing.id,db().prepare('UPDATE local_accounts SET password_hash=?,salt=?,iterations=?,role=?,college=?,cohort=?,updated=? WHERE id=?').bind(p.password_hash,p.salt,p.iterations,role,college,cohort,t,existing.id));}
+   else await updateAccountAndRevoke(db(),existing.id,db().prepare('UPDATE local_accounts SET role=?,college=?,cohort=?,updated=? WHERE id=?').bind(role,college,cohort,t,existing.id));
   }
   return json({username,role,college,cohort,active:1});
  }catch(e){return failure(e);}

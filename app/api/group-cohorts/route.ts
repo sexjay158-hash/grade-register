@@ -1,3 +1,4 @@
+import {guardedBatch,writableYearGuard,writableGroupGuard,accountWriteGuard} from '@/lib/guarded-batch';
 import {requireActiveCollege} from '@/lib/colleges';
 import {access,db,json,failure,readBody,requireEditor} from '@/lib/server';
 import {requireAccessibleYear} from '@/lib/semester-access';
@@ -12,6 +13,6 @@ export async function PATCH(req:Request){try{
  const group=await db().prepare('SELECT college FROM roster_groups WHERE owner=? AND year_id=? AND id=?').bind(a.owner,yearId,input.groupId).first<{college:string}>();
  if(!group)throw new Error('小组不存在');assertRosterEditor(a,group.college);await requireActiveCollege(a.owner,group.college);
  const cohort=normalizeCohort(input.cohort);
- await db().prepare('INSERT INTO group_cohorts(owner,year_id,group_id,cohort,manual) VALUES(?,?,?,?,1) ON CONFLICT(owner,group_id) DO UPDATE SET cohort=excluded.cohort,manual=1').bind(a.owner,yearId,input.groupId,cohort).run();
+ await guardedBatch(db(),[db().prepare('INSERT INTO group_cohorts(owner,year_id,group_id,cohort,manual) VALUES(?,?,?,?,1) ON CONFLICT(owner,group_id) DO UPDATE SET cohort=excluded.cohort,manual=1').bind(a.owner,yearId,input.groupId,cohort)],[writableYearGuard(a.owner,yearId),writableGroupGuard(a.owner,String(input.groupId),a),accountWriteGuard(a)]);
  return json({groupId:input.groupId,cohort});
 }catch(e){return failure(e);}}

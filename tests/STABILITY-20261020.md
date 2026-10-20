@@ -1,3 +1,5 @@
+> 历史测试，对应 eb1250b 源码；最新检查、修复及未通过的压力场景见 [FULL-STABILITY-20261020.md](./FULL-STABILITY-20261020.md)。
+
 # 稳定性与 200 人测试（2026-10-20）
 
 isolated local Worker/D1/R2; 6000 synthetic students, 200 distinct accounts

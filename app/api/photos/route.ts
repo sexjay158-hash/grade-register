@@ -1,3 +1,5 @@
+import {cleanupRejectedPhoto} from '@/lib/photo-write-cleanup';
+import {guardedBatch,writableGroupGuard,accountWriteGuard} from '@/lib/guarded-batch';
 import {db,bucket,access,requireEditor,json,failure,getEvent,now} from '@/lib/server';
 import {assertEventScope} from '@/lib/role-scope';
 export async function POST(req:Request){try{
@@ -12,6 +14,7 @@ export async function POST(req:Request){try{
  const duplicate=await db().prepare('SELECT p.id,e.number,g.name FROM photos p JOIN events e ON e.id=p.event_id JOIN roster_groups g ON g.id=e.group_id WHERE p.owner=? AND p.hash=?').bind(u,hash).first<any>();
  if(duplicate)throw new Error(a.role==='admin'?`这张照片已存在于 ${duplicate.name} 第 ${duplicate.number} 次活动，请勿重复上传`:'这张照片已上传过，请勿重复上传');
  const id=crypto.randomUUID(),key=`${u}/${id}`;await bucket().put(key,bytes,{httpMetadata:{contentType:f.type}});
- try{const result=await db().batch([db().prepare("INSERT INTO photos(id,owner,event_id,hash,name,mime,size,created) SELECT ?,?,?,?,?,?,?,? WHERE EXISTS(SELECT 1 FROM events WHERE id=? AND owner=? AND status='draft')").bind(id,u,eventId,hash,f.name.slice(0,200),f.type,f.size,now(),eventId,u),db().prepare('INSERT INTO photo_actors(kind,id,owner,account_id) SELECT ?,?,?,? WHERE EXISTS(SELECT 1 FROM photos WHERE id=? AND owner=?)').bind('photo',id,u,a.userId,id,u)]);if(!result[0].meta.changes)throw new Error('活动已登记，请重新打开后操作');}catch(err){await bucket().delete(key);throw err;}
+ let rejected=false;
+ try{const d=db(),result=await guardedBatch(d,[db().prepare("INSERT INTO photos(id,owner,event_id,hash,name,mime,size,created) SELECT ?,?,?,?,?,?,?,? WHERE EXISTS(SELECT 1 FROM events WHERE id=? AND owner=? AND status='draft') AND (SELECT COUNT(*) FROM photos WHERE event_id=?)<30").bind(id,u,eventId,hash,f.name.slice(0,200),f.type,f.size,now(),eventId,u,eventId),db().prepare('INSERT INTO photo_actors(kind,id,owner,account_id) SELECT ?,?,?,? WHERE EXISTS(SELECT 1 FROM photos WHERE id=? AND owner=?)').bind('photo',id,u,a.userId,id,u)],[writableGroupGuard(u,e.group_id,a),accountWriteGuard(a),{sql:"EXISTS(SELECT 1 FROM events WHERE id=? AND owner=? AND status='draft') AND (SELECT COUNT(*) FROM photos WHERE event_id=?)<30",values:[eventId,u,eventId]}],'活动已变化或照片已达 30 张，请刷新核对');if(!result[0].meta.changes){rejected=true;throw new Error('活动已登记，请重新打开后操作');}}catch(err){if(!await cleanupRejectedPhoto(err,()=>bucket().delete(key),rejected))console.error('Photo retained after uncertain write or cleanup failure',id);throw err;}
  return json({id});
 }catch(e){return failure(e);}}

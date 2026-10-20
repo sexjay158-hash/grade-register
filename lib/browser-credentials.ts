@@ -13,9 +13,9 @@ export function loadOcrCredentials():OcrCredentials|null{
 
 export function saveOcrCredentials(value:OcrCredentials){
  if(!FEATURES.rememberOcrCredentials||typeof window==='undefined')return;
- window.localStorage.setItem(STORAGE_KEY,JSON.stringify(value));
+ try{window.localStorage.setItem(STORAGE_KEY,JSON.stringify(value));}catch{}
 }
 
 export function clearOcrCredentials(){
- if(typeof window!=='undefined')window.localStorage.removeItem(STORAGE_KEY);
+ try{if(typeof window!=='undefined')window.localStorage.removeItem(STORAGE_KEY);}catch{}
 }

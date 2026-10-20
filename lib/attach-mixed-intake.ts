@@ -1,3 +1,4 @@
+import {guardedBatch,writableYearGuard,writableGroupGuard,accountWriteGuard,type WriteGuard} from './guarded-batch';
 import {db,now,type Access} from '@/lib/server';
 import {groupMatchedLines,type Score} from '@/lib/domain';
 import {yearForIntake} from '@/lib/yearly-rosters';
@@ -20,7 +21,7 @@ export async function attachMixedIntake(user:string,id:string,a?:Access){
   await d.prepare("UPDATE intake SET status='needs_review',unresolved=?,error=? WHERE id=? AND owner=? AND status<>'assigned'").bind(parsed.unresolved.length,reason,id,user).run();
   return {blocked:true,reason,matched:0,unresolved:parsed.unresolved.length,groupCount:0};
  }
- const drafts=await d.prepare("SELECT id,group_id,batch_id,date FROM events WHERE owner=? AND status='draft'").bind(user).all<{id:string;group_id:string;batch_id:string|null;date:string}>();
+ const drafts=await d.prepare("SELECT id,group_id,batch_id,date,version FROM events WHERE owner=? AND status='draft'").bind(user).all<{id:string;group_id:string;batch_id:string|null;date:string;version:number}>();
  const draftByGroup=new Map(drafts.results.map(e=>[e.group_id,e]));
  if(FEATURES.photoActivityDateGuard&&[...parsed.groups.keys()].some(groupId=>{const draft=draftByGroup.get(groupId);return draft&&draft.date!==photo.date;})){
   const reason='活动日期与该组未确认草稿不同，请核对日期；同次活动的多张表请使用相同日期，不同次活动请先完成现有草稿';
@@ -43,7 +44,10 @@ export async function attachMixedIntake(user:string,id:string,a?:Access){
   const conflicts=rows.filter(row=>{const old=bySid.get(row.sid);return old&&old.state!=='unrecorded'&&(old.score!==row.score||old.state!==row.state);}).length;
   plans.push({groupId,eventId,create:!draft,writeable,conflicts});
  }
- const t=now(),queries:any[]=[],matched=plans.reduce((n,p)=>n+p.writeable.length,0),unresolved=parsed.unresolved.length+plans.reduce((n,p)=>n+p.conflicts,0);
+ const checks:WriteGuard[]=[writableYearGuard(user,yearId),{sql:"EXISTS(SELECT 1 FROM intake WHERE id=? AND owner=? AND status<>'assigned' AND lines IS ?)",values:[id,user,photo.lines]}];
+ if(a)checks.push(accountWriteGuard(a));
+ for(const plan of plans){checks.push(writableGroupGuard(user,plan.groupId,a));const draft=draftByGroup.get(plan.groupId);checks.push(draft?{sql:"EXISTS(SELECT 1 FROM events WHERE id=? AND owner=? AND status='draft' AND version=?)",values:[draft.id,user,draft.version]}:{sql:"NOT EXISTS(SELECT 1 FROM events WHERE owner=? AND group_id=? AND status='draft')",values:[user,plan.groupId]});}
+ const t=now(),queries:D1PreparedStatement[]=[],matched=plans.reduce((n,p)=>n+p.writeable.length,0),unresolved=parsed.unresolved.length+plans.reduce((n,p)=>n+p.conflicts,0);
  for(const plan of plans){
   if(plan.create)queries.push(d.prepare("INSERT INTO events(id,owner,group_id,number,date,status,batch_id,created,updated) SELECT ?,?,?,COALESCE(MAX(number),0)+1,?,'draft',?,?,? FROM events WHERE owner=? AND group_id=?").bind(plan.eventId,user,plan.groupId,photo.date,photo.batch_id,t,t,user,plan.groupId));
   queries.push(d.prepare("INSERT INTO intake_event_links(intake_id,event_id,owner,matched) SELECT ?,?,?,? WHERE EXISTS(SELECT 1 FROM events WHERE id=? AND owner=? AND status='draft')").bind(id,plan.eventId,user,plan.writeable.length,plan.eventId,user));
@@ -53,7 +57,7 @@ export async function attachMixedIntake(user:string,id:string,a?:Access){
  }
  const primary=plans.length===1?plans[0]:null;
  queries.push(d.prepare("UPDATE intake SET status='assigned',group_id=?,event_id=?,matched=?,unresolved=?,error=? WHERE id=? AND owner=? AND status<>'assigned'").bind(primary?.groupId??null,primary?.eventId??null,matched,unresolved,unresolved?`${unresolved} 行未能安全录入，请对照原图核对`:'',id,user));
- const result=await d.batch(queries);
+ const result=await guardedBatch(d,queries,checks,'照片或活动已变化，请刷新后重新识别；本次未写入成绩');
  if(!result.at(-1)?.meta.changes)throw new Error('照片已被处理，请刷新页面');
  return {matched,unresolved,groupCount:plans.length,eventIds:plans.map(p=>p.eventId)};
 }

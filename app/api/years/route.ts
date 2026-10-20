@@ -1,3 +1,4 @@
+import {guardedBatch,accountWriteGuard,writableYearGuard} from '@/lib/guarded-batch';
 import {db,access,requireAdmin,json,failure,readBody,now} from '@/lib/server';
 import {ensureYearlyRoster,cleanRosterText} from '@/lib/yearly-rosters';
 import {requireAccessibleYear} from '@/lib/semester-access';
@@ -16,7 +17,7 @@ export async function POST(req:Request){try{
  const a=await access(req);requireAdmin(a);await ensureYearlyRoster(a.owner);const d=db(),input=await readBody(req),label=cleanRosterText(input.label,'学期名称',80),id=crypto.randomUUID(),t=now();
  if(await d.prepare('SELECT id FROM roster_years WHERE owner=? AND label=?').bind(a.owner,label).first())throw new Error('该学期名称已存在');
  const previous=FEATURES.semesterArchives&&input.archivePreviousYearId?await requireAccessibleYear(a,input.archivePreviousYearId,true):null;
- await d.batch([d.prepare('INSERT INTO roster_years(id,owner,label,created,updated) VALUES(?,?,?,?,?)').bind(id,a.owner,label,t,t),...(previous?[d.prepare('INSERT INTO semester_archives(owner,year_id,archived_at,archived_by) VALUES(?,?,?,?)').bind(a.owner,previous,t,a.email)]:[])]);
+ await guardedBatch(d,[d.prepare('INSERT INTO roster_years(id,owner,label,created,updated) VALUES(?,?,?,?,?)').bind(id,a.owner,label,t,t),...(previous?[d.prepare('INSERT INTO semester_archives(owner,year_id,archived_at,archived_by) VALUES(?,?,?,?)').bind(a.owner,previous,t,a.email)]:[])],[accountWriteGuard(a),{sql:'NOT EXISTS(SELECT 1 FROM roster_years WHERE owner=? AND label=?)',values:[a.owner,label]}],'学期名称或状态已变化，请刷新后重试');
  return json({id,label});
 }catch(e){return failure(e);}}
 export async function PATCH(req:Request){try{
@@ -26,11 +27,11 @@ export async function PATCH(req:Request){try{
   if(input.action==='restore')await d.prepare('DELETE FROM semester_archives WHERE owner=? AND year_id=?').bind(a.owner,id).run();
   else{
    if(!await d.prepare('SELECT y.id FROM roster_years y WHERE y.owner=? AND y.id<>? AND NOT EXISTS(SELECT 1 FROM semester_archives ar WHERE ar.owner=y.owner AND ar.year_id=y.id) LIMIT 1').bind(a.owner,id).first())throw new Error('请先创建新学期，再归档当前学期');
-   await d.prepare('INSERT OR IGNORE INTO semester_archives(owner,year_id,archived_at,archived_by) VALUES(?,?,?,?)').bind(a.owner,id,now(),a.email).run();
+   await guardedBatch(d,[d.prepare('INSERT OR IGNORE INTO semester_archives(owner,year_id,archived_at,archived_by) VALUES(?,?,?,?)').bind(a.owner,id,now(),a.email)],[accountWriteGuard(a),{sql:'EXISTS(SELECT 1 FROM roster_years y WHERE y.owner=? AND y.id<>? AND NOT EXISTS(SELECT 1 FROM semester_archives ar WHERE ar.owner=y.owner AND ar.year_id=y.id))',values:[a.owner,id]}],'请先创建新学期，再归档当前学期；至少保留一个在用学期');
   }
   return json({id,archived:input.action==='archive'});
  }
  await requireAccessibleYear(a,id,true);const label=cleanRosterText(input.label,'学期名称',80);
  if(await d.prepare('SELECT id FROM roster_years WHERE owner=? AND label=? AND id<>?').bind(a.owner,label,id).first())throw new Error('该学期名称已存在');
- await d.prepare('UPDATE roster_years SET label=?,updated=? WHERE id=? AND owner=?').bind(label,now(),id,a.owner).run();return json({id,label});
+ await guardedBatch(d,[d.prepare('UPDATE roster_years SET label=?,updated=? WHERE id=? AND owner=?').bind(label,now(),id,a.owner)],[accountWriteGuard(a),writableYearGuard(a.owner,id),{sql:'NOT EXISTS(SELECT 1 FROM roster_years WHERE owner=? AND label=? AND id<>?)',values:[a.owner,label,id]}],'学期名称或状态已变化，请刷新后重试');return json({id,label});
 }catch(e){return failure(e);}}
