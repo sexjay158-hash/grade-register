@@ -61,8 +61,8 @@ async function cleanState(){
 }
 
 try{
- console.log('Building current source…');
- run(['scripts/run-framework.mjs','build']);
+ console.log(process.argv.includes('--skip-build')?'Using the already verified build…':'Building current source…');
+ if(!process.argv.includes('--skip-build'))run(['scripts/run-framework.mjs','build']);
  console.log('Applying migrations to an isolated database…');
  const migrations=readdirSync(path.join(root,'drizzle')).filter(name=>name.endsWith('.sql')).sort();
  for(const file of migrations)run([...wrangler,'d1','execute','DB','--local','--config','dist/server/wrangler.json','--persist-to',stateDir,'--file',path.join(root,'drizzle',file)]);
@@ -72,7 +72,7 @@ try{
  for(const stream of [worker.stdout,worker.stderr])stream.on('data',chunk=>{workerOutput=(workerOutput+chunk.toString()).slice(-10000);});
  await waitForWorker(`http://127.0.0.1:${port}/login`);
  console.log('Running isolated login/read/write/upload load tests…');
- await runWithWorker(['tests/load.integration.mjs'],{...process.env,TEST_BASE_URL:base,TEST_BOOTSTRAP_TOKEN:token,LOAD_REPORT_DIR:path.resolve(root,'..','reports')});
+ await runWithWorker(['tests/load.integration.mjs'],{...process.env,TEST_BASE_URL:base,TEST_BOOTSTRAP_TOKEN:token,LOAD_REPORT_DIR:process.env.LOAD_REPORT_DIR??path.resolve(root,'..','reports')});
 }catch(error){
  console.error(workerOutput.slice(-4000).replaceAll(token,'[test token]'));
  throw error;

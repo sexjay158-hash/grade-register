@@ -1,3 +1,6 @@
+import {FEATURES} from './flags';
+import {initializeQueryIndexes} from './query-indexes';
+import {initializeOnce} from './query-initialization';
 import {refreshGroupCohorts} from './group-cohorts';
 import {db,now} from '@/lib/server';
 
@@ -6,6 +9,9 @@ export const legacyYearId=(owner:string)=>`legacy:${owner}`;
 
 // Additive storage keeps the original roster intact for rollback. The first read copies it once.
 export async function ensureYearlyRoster(owner:string){
+ await initializeOnce('year-schema:'+owner,()=>ensureYearlyRosterUncached(owner));return legacyYearId(owner);
+}
+async function ensureYearlyRosterUncached(owner:string){
  const d=db();
  await d.batch([
   d.prepare('CREATE TABLE IF NOT EXISTS roster_years(id TEXT PRIMARY KEY,owner TEXT NOT NULL,label TEXT NOT NULL,created TEXT NOT NULL,updated TEXT NOT NULL)'),
@@ -24,6 +30,7 @@ export async function ensureYearlyRoster(owner:string){
   d.prepare('INSERT OR IGNORE INTO roster_students(owner,year_id,sid,name,college,group_id,position,active) SELECT owner,?,sid,name,college,group_id,position,1 FROM students WHERE owner=?').bind(id,owner),
   d.prepare('INSERT OR IGNORE INTO roster_intakes(intake_id,owner,year_id) SELECT id,owner,? FROM intake WHERE owner=?').bind(id,owner)
  ]);}
+ if(FEATURES.concurrentQueries)await initializeOnce('query-indexes',initializeQueryIndexes);
  return id;
 }
 export async function requireYear(owner:string,yearId:unknown){

@@ -50,6 +50,16 @@ for(const [user,role,cohort] of [[lead,'college_lead',null],[rec24,'recorder','2
  const login=await call(user,'auth/login',{username:user.username,password:testPassword});assert.equal(login.status,200);user.cookie=login.cookie;
 }
 const full=(await call(admin,'state?yearId='+year)).data;
+// Cached initialization must not cache responsibility: number edits and removals invalidate it.
+const revisionYear=(await call(admin,'years',{label:'年级重算-'+nonce})).data.id;
+const revisionRows=[{sid:'2024'+nonce+'rev1',name:'重算甲',college:collegeA,group:'重算组'},{sid:'2024'+nonce+'rev2',name:'重算乙',college:collegeA,group:'重算组'},{sid:'2025'+nonce+'rev3',name:'重算丙',college:collegeA,group:'重算组'}];
+assert.equal((await call(admin,'roster',{yearId:revisionYear,rows:revisionRows})).status,200);
+assert.equal((await call(rec24,'state?yearId='+revisionYear)).data.students.length,3);
+assert.equal((await call(admin,'students',{yearId:revisionYear,oldSid:revisionRows[0].sid,sid:'2025'+nonce+'rev1',name:'重算甲',college:collegeA,group:'重算组'},'PUT')).status,200);
+assert.equal((await call(rec24,'state?yearId='+revisionYear)).data.students.length,0,'number edit immediately revokes former cohort scope');
+assert.equal((await call(rec25,'state?yearId='+revisionYear)).data.students.length,3,'number edit immediately grants new majority scope');
+assert.equal((await call(admin,'students',{yearId:revisionYear,sid:revisionRows[2].sid},'DELETE')).status,200);
+assert.equal((await call(rec25,'state?yearId='+revisionYear)).data.students.length,0,'removal recomputes a tied majority');
 const group=full.groups.find(row=>row.name==='跨年级组'&&row.college===collegeA);
 assert.equal(full.students.filter(row=>[sid24,sid25,sidB].includes(row.sid)).length,3);
 assert.deepEqual((await call(lead,'state?yearId='+year)).data.students.map(row=>row.sid).sort(),[sid24,sid25,sidOther24].sort());

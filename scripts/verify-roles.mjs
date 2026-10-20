@@ -61,8 +61,8 @@ async function cleanState(){
 }
 
 try{
- console.log('Building current source…');
- run(['scripts/run-framework.mjs','build']);
+ console.log(process.argv.includes('--skip-build')?'Using the already verified build…':'Building current source…');
+ if(!process.argv.includes('--skip-build'))run(['scripts/run-framework.mjs','build']);
  console.log('Applying migrations to an isolated database…');
  const migrations=readdirSync(path.join(root,'drizzle')).filter(name=>name.endsWith('.sql')).sort();
  for(const file of migrations)run([...wrangler,'d1','execute','DB','--local','--config','dist/server/wrangler.json','--persist-to',stateDir,'--file',path.join(root,'drizzle',file)]);

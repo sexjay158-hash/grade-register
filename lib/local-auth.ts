@@ -78,11 +78,8 @@ function readCookie(header:string){const part=header.split(';').map(item=>item.t
 export async function accountFromCookie(cookieHeader:string){
  const token=readCookie(cookieHeader);if(!token)return null;
  await ensureLocalAuth();
- const session=await database().prepare('SELECT account_id,expires FROM local_sessions WHERE token_hash=?')
-  .bind(await sha256(token)).first<{account_id:string;expires:string}>();
- if(!session||session.expires<=new Date().toISOString())return null;
- return database().prepare('SELECT id,username,role,college,cohort,active FROM local_accounts WHERE id=? AND active=1')
-  .bind(session.account_id).first<LocalAccount>();
+ return database().prepare('SELECT a.id,a.username,a.role,a.college,a.cohort,a.active FROM local_sessions s JOIN local_accounts a ON a.id=s.account_id WHERE s.token_hash=? AND s.expires>? AND a.active=1')
+  .bind(await sha256(token),new Date().toISOString()).first<LocalAccount>();
 }
 export async function accountFromRequest(req:Request){return accountFromCookie(req.headers.get('cookie')??'');}
 export async function newSession(accountId:string,req:Request){

@@ -42,6 +42,7 @@ export const FEATURES = {
  studentGradeManagement: true,
  // Set false and republish to return to the previous ChatGPT login while retaining local accounts.
  localAccounts: true,
+ concurrentQueries: true,
  resilientLogin: true,
  memberAccountManagement: true,
  collegeStaffDirectory: true,

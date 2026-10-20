@@ -44,6 +44,6 @@ export async function DELETE(req:Request){try{
  if(a.role==='recorder'||a.role!=='admin'&&a.college!==college)throw new Error('无权限：仅管理员和本院负责人可清空学院名单');
  if(input.confirmCollege!==college)throw new Error('请输入完整学院名称确认清空');
  await requireActiveCollege(a.owner,college);
- const result=await db().prepare('UPDATE roster_students SET active=0 WHERE owner=? AND year_id=? AND college=? AND active=1').bind(a.owner,yearId,college).run();
- return json({deleted:result.meta.changes,historyPreserved:true});
+ const result=await db().prepare('UPDATE roster_students SET active=0 WHERE owner=? AND year_id=? AND college=? AND active=1 RETURNING sid').bind(a.owner,yearId,college).all();
+ return json({deleted:result.results.length,historyPreserved:true});
 }catch(e){return failure(e);}}

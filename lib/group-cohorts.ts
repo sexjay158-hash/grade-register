@@ -5,7 +5,9 @@ import {majorityCohort} from './group-cohort-domain';
 
 export async function refreshGroupCohorts(owner:string,yearId:string){
  if(!FEATURES.groupCohortScope)return;
- await db().prepare(`WITH counts AS (
+ const d=db();
+ if(FEATURES.concurrentQueries){const version=await d.prepare('SELECT revision,applied FROM group_cohort_versions WHERE owner=? AND year_id=?').bind(owner,yearId).first<{revision:number;applied:number}>();if(version&&version.revision===version.applied)return;}
+ const refresh=d.prepare(`WITH counts AS (
  SELECT group_id,substr(COALESCE((SELECT number FROM student_numbers sn WHERE sn.owner=roster_students.owner AND sn.year_id=roster_students.year_id AND sn.sid=roster_students.sid),sid),1,4) AS cohort,COUNT(*) AS n FROM roster_students
  WHERE owner=? AND year_id=? AND active=1 AND substr(COALESCE((SELECT number FROM student_numbers sn WHERE sn.owner=roster_students.owner AND sn.year_id=roster_students.year_id AND sn.sid=roster_students.sid),sid),1,4) GLOB '[12][0-9][0-9][0-9]' GROUP BY group_id,substr(COALESCE((SELECT number FROM student_numbers sn WHERE sn.owner=roster_students.owner AND sn.year_id=roster_students.year_id AND sn.sid=roster_students.sid),sid),1,4)
  ),ranked AS (SELECT *,DENSE_RANK() OVER(PARTITION BY group_id ORDER BY n DESC) AS rank FROM counts),
@@ -14,7 +16,8 @@ export async function refreshGroupCohorts(owner:string,yearId:string){
  SELECT ?,?,group_id,cohort,0 FROM winners WHERE 1
  ON CONFLICT(owner,group_id) DO UPDATE SET cohort=excluded.cohort
  WHERE group_cohorts.manual=0 AND group_cohorts.cohort IS NOT excluded.cohort
- AND NOT EXISTS(SELECT 1 FROM semester_archives ar WHERE ar.owner=group_cohorts.owner AND ar.year_id=group_cohorts.year_id)`).bind(owner,yearId,owner,yearId).run();
+ AND NOT EXISTS(SELECT 1 FROM semester_archives ar WHERE ar.owner=group_cohorts.owner AND ar.year_id=group_cohorts.year_id)`).bind(owner,yearId,owner,yearId);
+ if(FEATURES.concurrentQueries)await d.batch([refresh,d.prepare('INSERT INTO group_cohort_versions(owner,year_id,revision,applied) VALUES(?,?,1,1) ON CONFLICT(owner,year_id) DO UPDATE SET applied=revision').bind(owner,yearId)]);else await refresh.run();
 }
 export async function cohortForGroup(owner:string,yearId:string,college:string,name:string,fallback:string){
  if(!FEATURES.groupCohortScope)return fallback;

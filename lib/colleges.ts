@@ -1,3 +1,4 @@
+import {initializeOnce} from './query-initialization';
 import {db,now,type Access} from '@/lib/server';
 import {cohortExpr,scopeCohortExpr,cohortJoin} from '@/lib/role-scope';
 import {ensureYearlyRoster,cleanRosterText} from '@/lib/yearly-rosters';
@@ -6,6 +7,9 @@ export type College={id:string;name:string;active:number;students:number;groups:
 
 // Existing roster names become school-level college records without changing any grades.
 export async function ensureColleges(owner:string){
+ await initializeOnce('college-schema:'+owner,()=>ensureCollegesUncached(owner));
+}
+async function ensureCollegesUncached(owner:string){
  await ensureYearlyRoster(owner);
  const d=db();
  await d.prepare('CREATE TABLE IF NOT EXISTS colleges(id TEXT PRIMARY KEY,owner TEXT NOT NULL,name TEXT NOT NULL,active INTEGER NOT NULL DEFAULT 1,created TEXT NOT NULL,updated TEXT NOT NULL,UNIQUE(owner,name))').run();
@@ -15,14 +19,14 @@ export async function ensureColleges(owner:string){
  if(source.results.length){const t=now();await d.batch(source.results.map(row=>d.prepare('INSERT OR IGNORE INTO colleges(id,owner,name,active,created,updated) VALUES(?,?,?,1,?,?)').bind(crypto.randomUUID(),owner,row.name,t,t)));}
 }
 
-export async function listColleges(owner:string,yearId:string):Promise<College[]>{
+export async function listColleges(owner:string,yearId:string,college?:string):Promise<College[]>{
  await ensureColleges(owner);
  const rows=await db().prepare(`SELECT c.id,c.name,c.active,
   (SELECT COUNT(*) FROM roster_students s WHERE s.owner=c.owner AND s.year_id=? AND s.college=c.name AND s.active=1) AS students,
   (SELECT COUNT(*) FROM roster_groups g WHERE g.owner=c.owner AND g.year_id=? AND g.college=c.name) AS groups,
   (SELECT COUNT(*) FROM events e JOIN roster_groups g ON g.id=e.group_id WHERE e.owner=c.owner AND g.year_id=? AND g.college=c.name AND e.status='committed') AS events,
   (SELECT COUNT(*) FROM events e JOIN roster_groups g ON g.id=e.group_id WHERE e.owner=c.owner AND g.year_id=? AND g.college=c.name AND e.status='draft') AS drafts
-  FROM colleges c WHERE c.owner=? ORDER BY c.active DESC,c.name`).bind(yearId,yearId,yearId,yearId,owner).all<College>();
+  FROM colleges c WHERE c.owner=? ${college?'AND c.name=?':''} ORDER BY c.active DESC,c.name`).bind(yearId,yearId,yearId,yearId,owner,...(college?[college]:[])).all<College>();
  return rows.results;
 }
 

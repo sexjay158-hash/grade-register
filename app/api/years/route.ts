@@ -6,9 +6,9 @@ import {FEATURES} from '@/lib/flags';
 export async function GET(req:Request){try{
  const a=await access(req);await ensureYearlyRoster(a.owner);
  const archived=new URL(req.url).searchParams.get('archived')==='1';if(archived)requireAdmin(a);
- const rows=await db().prepare(`SELECT y.id,y.label,y.created,y.updated,ar.archived_at,ar.archived_by,
- (SELECT COUNT(*) FROM roster_students s WHERE s.owner=y.owner AND s.year_id=y.id AND s.active=1) AS students,
- (SELECT COUNT(*) FROM events e JOIN roster_groups g ON g.id=e.group_id WHERE e.owner=y.owner AND g.year_id=y.id) AS events
+ const rows=await db().prepare(`SELECT y.id,y.label,y.created,y.updated,ar.archived_at,ar.archived_by
+ ${a.role==='admin'||!FEATURES.concurrentQueries?`,(SELECT COUNT(*) FROM roster_students s WHERE s.owner=y.owner AND s.year_id=y.id AND s.active=1) AS students,
+ (SELECT COUNT(*) FROM events e JOIN roster_groups g ON g.id=e.group_id WHERE e.owner=y.owner AND g.year_id=y.id) AS events`:''}
  FROM roster_years y LEFT JOIN semester_archives ar ON ar.owner=y.owner AND ar.year_id=y.id WHERE y.owner=? ${FEATURES.semesterArchives?(archived?'AND ar.year_id IS NOT NULL':'AND ar.year_id IS NULL'):''} ORDER BY y.created DESC`).bind(a.owner).all();
  return json(rows.results.map(row=>a.role==='admin'?row:{id:row.id,label:row.label,created:row.created,updated:row.updated}));
 }catch(e){return failure(e);}}
