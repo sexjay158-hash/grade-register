@@ -16,7 +16,15 @@ export async function POST(req:Request){try{
  const legacy=await d.prepare('SELECT id FROM photos WHERE owner=? AND hash=?').bind(u,hash).first();
  if(existing||legacy)throw new Error('这张照片已经上传过，请在预览中查看');
  const id=crypto.randomUUID();await bucket().put(`${u}/${id}`,bytes,{httpMetadata:{contentType:f.type}});
- try{await d.batch([d.prepare("INSERT INTO intake(id,owner,batch_id,hash,name,mime,size,date,status,created) VALUES(?,?,?,?,?,?,?,?,?,?)").bind(id,u,batchId,hash,f.name.slice(0,200),f.type,f.size,date,'pending',now()),d.prepare('INSERT INTO roster_intakes(intake_id,owner,year_id) VALUES(?,?,?)').bind(id,u,yearId),d.prepare('INSERT INTO photo_actors(kind,id,owner,account_id) VALUES(?,?,?,?)').bind('intake',id,u,a.userId)]);}catch(e){await bucket().delete(`${u}/${id}`);throw e;}
+ try{
+  const result=await d.batch([
+   // Recheck capacity inside the insert: simultaneous uploads cannot all pass a prior COUNT.
+   d.prepare("INSERT INTO intake(id,owner,batch_id,hash,name,mime,size,date,status,created) SELECT ?,?,?,?,?,?,?,?,?,? WHERE (SELECT COUNT(*) FROM intake WHERE owner=? AND batch_id=?)<30").bind(id,u,batchId,hash,f.name.slice(0,200),f.type,f.size,date,'pending',now(),u,batchId),
+   d.prepare('INSERT INTO roster_intakes(intake_id,owner,year_id) SELECT ?,?,? WHERE EXISTS(SELECT 1 FROM intake WHERE id=? AND owner=?)').bind(id,u,yearId,id,u),
+   d.prepare('INSERT INTO photo_actors(kind,id,owner,account_id) SELECT ?,?,?,? WHERE EXISTS(SELECT 1 FROM intake WHERE id=? AND owner=?)').bind('intake',id,u,a.userId,id,u)
+  ]);
+  if(!result[0].meta.changes)throw new Error('同一批次最多上传 30 张照片');
+ }catch(e){await bucket().delete(`${u}/${id}`);throw e;}
  return json({id,status:'pending'});
 }catch(e){return failure(e);}}
 

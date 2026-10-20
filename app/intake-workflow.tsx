@@ -1,4 +1,5 @@
 "use client";
+import {requestJson} from '@/lib/browser-request';
 import {studentNumber} from '@/lib/student-number';
 import {usePhotoUploadReview} from './photo-upload-review';
 import {Fragment,useRef,useState} from 'react';
@@ -24,7 +25,7 @@ export type Grade={sid:string;score:number|null;state:string;event_id:string;num
 type Group={id:string;name:string;members:number};
 type PreviewEvent={id:string;status:string;group_id:string;number:number;version:number;rating:ActivityRating|null};
 type Props={readOnly?:boolean;mode?:'all'|'photos'|'grades';groups:Group[];students:Student[];intake:Intake[];intakeLinks:IntakeLink[];grades:Grade[];events:PreviewEvent[];college?:string;cohort?:string;role?:'admin'|'college_lead'|'recorder';yearId:string;keyValue:string;secret:string;configured:boolean;provider:'browser'|'local'|'baidu';load:()=>Promise<void>;openEvent:(id:string)=>Promise<void>;editEvent:(id:string)=>Promise<void>;exportExcel:(scope?:'selected'|'all')=>Promise<void>;setTab:(v:string)=>void;date:string;setDate:(v:string)=>void};
-async function api(path:string,init?:RequestInit){const r=await fetch('/api/'+path,init),data:any=await r.json();if(!r.ok)throw new Error(data.error??'处理失败');return data;}
+async function api(path:string,init?:RequestInit){return requestJson<any>('/api/'+path,init,{timeoutMs:60000});}
 const json=(x:any)=>({method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(x)});
 function ConvertedGrade({score,state,rating,draft}:{score:number|null;state:string;rating:ActivityRating|null;draft:boolean}){
  const value=convertedScore(score,state,rating);

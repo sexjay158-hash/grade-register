@@ -26,7 +26,7 @@ function save(report){fs.mkdirSync(path.dirname(reportPath),{recursive:true});fs
 
 let report=fs.existsSync(reportPath)&&phase==='upload'?JSON.parse(fs.readFileSync(reportPath,'utf8')):{date:'2026-10-20',machine:{logicalCpus:os.cpus().length,memoryGiB:Math.round(os.totalmem()/1024**3)},results:[],checks:[]};
 try{
- if(phase==='login'){
+ if(phase==='login'||phase==='seed'){
   const admin={cookie:(await must(null,'auth/bootstrap',{setupToken:token,username:'burst-admin',password})).cookie},year=(await must(admin,'years')).body[0].id;
   const colleges=Array.from({length:10},(_,i)=>'并发学院'+i);for(const name of colleges)await must(admin,'colleges',{name});
   const rows=Array.from({length:6000},(_,i)=>({sid:'2024'+String(i).padStart(7,'0'),name:'并发学生'+i,college:colleges[Math.floor(i/600)],group:'并发组'+Math.floor(i/30)}));
@@ -41,7 +41,8 @@ try{
   const initial=await must(admin,'state?yearId='+year);assert.equal(initial.body.students.length,6000);
   fs.writeFileSync(fixturePath,JSON.stringify({admin,year,users:users.map(({username,college,cookie})=>({username,college,cookie}))}));
   report.checks.push('200 个不同账号与 200 个不同会话逐个校验，均能读取本人身份。');
-  console.log('Starting 200 distinct simultaneous password logins…');const start=performance.now(),responses=await pool(200,200,i=>call(null,'auth/login',{username:users[i].username,password},20000));const row=summarize('200账号同时登录',responses,performance.now()-start,20000);report.results.push(row);console.log(JSON.stringify(row));
+  if(phase==='seed'){console.log('Synthetic fixture ready.');process.exitCode=0;}else{
+  console.log('Starting 200 distinct simultaneous password logins…');const start=performance.now(),responses=await pool(200,200,i=>call(null,'auth/login',{username:users[i].username,password},20000));const row=summarize('200账号同时登录',responses,performance.now()-start,20000);report.results.push(row);console.log(JSON.stringify(row));}
  }else if(phase==='upload'){
   const {admin,year,users}=JSON.parse(fs.readFileSync(fixturePath,'utf8'));assert.equal((await must(admin,'state?yearId='+year)).body.students.length,6000);
   const png=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aWlUAAAAASUVORK5CYII=','base64');
@@ -56,4 +57,4 @@ try{
   const final=await must(admin,'state?yearId='+year);assert.equal(final.body.students.length,6000);report.checks.push('压力结束后可读取状态，学生仍为 6000 名。');
   console.log('REPORT '+reportPath.replace('.json','.md'));
  }else throw new Error('Expected login or upload phase');
-}catch(error){report.failure=error.message;throw error;}finally{save(report);}
+}catch(error){report.failure=error.message;throw error;}finally{if(phase!=='seed')save(report);}

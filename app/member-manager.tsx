@@ -1,4 +1,5 @@
 "use client";
+import {requestJson} from '@/lib/browser-request';
 import {useEffect,useState} from 'react';
 import {Users,UserX,KeyRound,RefreshCw,Trash2,Search} from 'lucide-react';
 import {Button} from '@/components/ui/button';
@@ -14,7 +15,7 @@ import {MemberManager as LegacyMemberManager} from './member-manager-legacy';
 type Member={username:string;role:'college_lead'|'recorder';college:string;cohort:string|null;active:number};
 const alphabet='ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%';
 function generatedPassword(){const values=crypto.getRandomValues(new Uint8Array(20));return Array.from(values,n=>alphabet[n%alphabet.length]).join('');}
-async function request<T=unknown>(path:string,method='GET',body?:unknown):Promise<T>{const r=await fetch(path,{method,headers:{'Content-Type':'application/json'},body:body?JSON.stringify(body):undefined}),data=await r.json() as T&{error?:string};if(!r.ok)throw new Error(data.error??'操作失败');return data;}
+async function request<T=unknown>(path:string,method='GET',body?:unknown):Promise<T>{return requestJson<T>(path,{method,headers:{'Content-Type':'application/json'},body:body?JSON.stringify(body):undefined});}
 
 export function MemberManager({colleges,adminUsername=''}:{colleges:string[];adminUsername?:string}){
  if(!FEATURES.localAccounts)return <LegacyMemberManager colleges={colleges}/>;

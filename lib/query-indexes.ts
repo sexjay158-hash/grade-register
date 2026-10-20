@@ -5,6 +5,7 @@ export async function initializeQueryIndexes(){
  await d.batch([
   d.prepare('CREATE INDEX IF NOT EXISTS roster_scope_position ON roster_students(owner,year_id,college,active,position)'),
   d.prepare('CREATE INDEX IF NOT EXISTS events_group_status ON events(owner,group_id,status)'),
+  d.prepare('CREATE INDEX IF NOT EXISTS intake_owner_batch ON intake(owner,batch_id)'),
   d.prepare('CREATE INDEX IF NOT EXISTS photos_event ON photos(event_id)'),
   d.prepare('CREATE INDEX IF NOT EXISTS intake_links_event ON intake_event_links(event_id)'),
   d.prepare('CREATE INDEX IF NOT EXISTS intake_links_photo ON intake_event_links(owner,intake_id)'),

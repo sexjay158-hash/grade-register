@@ -22,7 +22,13 @@ async function call(user,path,data,method=data===undefined?'GET':'POST'){
  let response=await fetch(base+path,{method,headers,body:data===undefined?undefined:data instanceof FormData?data:JSON.stringify(data),signal:AbortSignal.timeout(15000)}).catch(error=>{throw new Error(`${method} ${path}: ${error.message}`);});
  // Local workerd sometimes restarts after rejecting an unread POST body.
  // Retry only the exact local restart response; application failures are never retried.
- if(response.status===503){const message=await response.text();assert.match(message,/Your worker restarted mid-request/);response=await fetch(base+path,{method,headers,body:data===undefined?undefined:data instanceof FormData?data:JSON.stringify(data),signal:AbortSignal.timeout(15000)});}
+ for(let retries=0;response.status===503;retries++){
+  const message=await response.text();let problem;try{problem=JSON.parse(message);}catch{}
+  if(path==='auth/login'&&problem?.code==='LOGIN_BUSY'){
+   assert.ok(retries<40,'login waiting must be bounded');await new Promise(resolve=>setTimeout(resolve,3000));
+  }else{assert.match(message,/Your worker restarted mid-request/);assert.ok(retries<1,'only one local restart retry');}
+  response=await fetch(base+path,{method,headers,body:data===undefined?undefined:data instanceof FormData?data:JSON.stringify(data),signal:AbortSignal.timeout(15000)});
+ }
  const type=response.headers.get('content-type')??'';
  return {status:response.status,data:type.includes('json')?await response.json():await response.arrayBuffer(),cookie:response.headers.get('set-cookie')?.split(';')[0]??''};
 }

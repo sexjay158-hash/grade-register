@@ -1,4 +1,5 @@
 "use client";
+import {requestJson} from '@/lib/browser-request';
 import {useCallback,useEffect,useState} from 'react';
 import {RefreshCw,Users} from 'lucide-react';
 import {Button} from '@/components/ui/button';
@@ -9,8 +10,7 @@ type Recorder={username:string;college:string;cohort:string|null;active:number};
 export function CollegeRecorders({college}:{college:string}){
  const [members,setMembers]=useState<Recorder[]>([]),[query,setQuery]=useState(''),[loading,setLoading]=useState(true),[error,setError]=useState('');
  const load=useCallback(async()=>{setLoading(true);setError('');try{
-  const response=await fetch('/api/members'),data=await response.json() as Recorder[]&{error?:string};
-  if(!response.ok)throw new Error(data.error??'读取年级负责人失败');setMembers(data);
+  const data=await requestJson<Recorder[]>('/api/members');setMembers(data);
  }catch(e){setMembers([]);setError((e as Error).message);}finally{setLoading(false);}},[]);
  useEffect(()=>{void load();},[college,load]);
  const filtered=members.filter(item=>[item.username,item.cohort??'',item.active?'可登录':'已停用'].some(value=>value.toLowerCase().includes(query.trim().toLowerCase())));

@@ -43,6 +43,8 @@ export const FEATURES = {
  // Set false and republish to return to the previous ChatGPT login while retaining local accounts.
  localAccounts: true,
  concurrentQueries: true,
+ // Disable to restore the previous login admission and 20-second refresh baseline.
+ stabilityProtection: true,
  resilientLogin: true,
  memberAccountManagement: true,
  collegeStaffDirectory: true,

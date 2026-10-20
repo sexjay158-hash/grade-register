@@ -1,7 +1,8 @@
 "use client";
 import {PASSWORD_MIN_LENGTH} from '@/lib/password-policy';
 import {useEffect,useRef,useState,type FormEvent} from 'react';
-import {requestJson} from '@/lib/browser-request';
+import {requestJson,loginWithWaiting} from '@/lib/browser-request';
+import {FEATURES} from '@/lib/flags';
 import {Button} from '@/components/ui/button';
 import {Input} from '@/components/ui/input';
 
@@ -9,10 +10,21 @@ async function submit(path:string,value:unknown){await requestJson(path,{method:
 function Shell({title,description,children}:{title:string;description:string;children:React.ReactNode}){return <main className="auth-shell"><section className="auth-card"><div className="auth-brand"><img src="/arts-university-logo.png" alt="学校校徽"/><div><strong>课外锻炼</strong><span>全校成绩登记</span></div></div><h1>{title}</h1><p>{description}</p>{children}</section></main>;}
 export function LoginForm(){
  const [username,setUsername]=useState(''),[password,setPassword]=useState(''),[busy,setBusy]=useState(false),[error,setError]=useState('');
- const submitting=useRef(false);
- useEffect(()=>{const restored=()=>{submitting.current=false;setBusy(false);};window.addEventListener('pageshow',restored);return()=>window.removeEventListener('pageshow',restored);},[]);
- async function login(e:FormEvent<HTMLFormElement>){e.preventDefault();if(submitting.current)return;submitting.current=true;setBusy(true);setError('');const form=new FormData(e.currentTarget);try{await submit('/api/auth/login',{username:String(form.get('username')??username),password:String(form.get('password')??password)});await requestJson('/api/me');window.location.replace('/');}catch(err){setError((err as Error).message);}finally{submitting.current=false;setBusy(false);}}
- return <Shell title="账号密码登录" description="请使用管理员分配给你的系统账号和密码。"><form onSubmit={login} className="auth-form" aria-busy={busy}><label>账号<Input name="username" autoComplete="username" autoCapitalize="none" autoCorrect="off" value={username} onChange={e=>setUsername(e.target.value)} placeholder="输入管理员分配的账号" required/></label><label>密码<Input name="password" type="password" autoComplete="current-password" value={password} onChange={e=>setPassword(e.target.value)} placeholder="输入密码" required/></label>{error&&<p className="auth-error" role="alert">{error}</p>}<Button type="submit" disabled={busy}>{busy?'登录中…':'登录系统'}</Button></form><p className="auth-help">忘记账号或密码，请联系学校管理员重置。</p></Shell>;
+ const submitting=useRef(false),attempt=useRef<AbortController|null>(null);
+ const [waiting,setWaiting]=useState(false);
+ useEffect(()=>{const restored=()=>{attempt.current?.abort();submitting.current=false;setBusy(false);setWaiting(false);};window.addEventListener('pageshow',restored);return()=>{attempt.current?.abort();window.removeEventListener('pageshow',restored);};},[]);
+ async function login(e:FormEvent<HTMLFormElement>){
+  e.preventDefault();if(submitting.current)return;submitting.current=true;setBusy(true);setWaiting(false);setError('');
+  const controller=new AbortController();attempt.current=controller;
+  const form=new FormData(e.currentTarget),value={username:String(form.get('username')??username),password:String(form.get('password')??password)};
+  try{
+   if(FEATURES.stabilityProtection)await loginWithWaiting(value,()=>setWaiting(true),controller.signal);else await submit('/api/auth/login',value);
+   await requestJson('/api/me',{signal:controller.signal});window.location.replace('/');
+  }catch(err){if(!controller.signal.aborted)setError((err as Error).message);}
+  finally{if(attempt.current===controller){submitting.current=false;setBusy(false);setWaiting(false);attempt.current=null;}}
+ }
+
+ return <Shell title="账号密码登录" description="请使用管理员分配给你的系统账号和密码。"><form onSubmit={login} className="auth-form" aria-busy={busy}><label>账号<Input name="username" disabled={busy} autoComplete="username" autoCapitalize="none" autoCorrect="off" value={username} onChange={e=>setUsername(e.target.value)} placeholder="输入管理员分配的账号" required/></label><label>密码<Input name="password" disabled={busy} type="password" autoComplete="current-password" value={password} onChange={e=>setPassword(e.target.value)} placeholder="输入密码" required/></label>{error&&<p className="auth-error" role="alert">{error}</p>}<Button type="submit" disabled={busy}>{busy?(waiting?'登录人数较多，等待中…':'登录中…'):'登录系统'}</Button>{busy&&waiting&&<Button type="button" variant="outline" onClick={()=>{attempt.current?.abort();}}>取消等待</Button>}</form><p className="auth-help">忘记账号或密码，请联系学校管理员重置。</p></Shell>;
 }
 export function SetupForm(){
  const [setupToken,setSetupToken]=useState(''),[username,setUsername]=useState('admin'),[password,setPassword]=useState(''),[repeat,setRepeat]=useState(''),[busy,setBusy]=useState(false),[error,setError]=useState('');

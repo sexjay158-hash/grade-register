@@ -1,4 +1,5 @@
 "use client";
+import {requestJson} from '@/lib/browser-request';
 import {useState} from 'react';
 import {Building2,Plus,Search,PenLine,Archive,Trash2,RotateCcw,ChevronRight} from 'lucide-react';
 import {Button} from '@/components/ui/button';
@@ -11,7 +12,7 @@ import {FEATURES} from '@/lib/flags';
 import type {College} from '@/lib/colleges';
 
 type CollegeChange={id:string;name:string;active:number;oldName?:string;deleted?:boolean;photoCleanupFailed?:number};
-async function request(method:string,input:unknown):Promise<CollegeChange>{let response:Response;try{response=await fetch('/api/colleges',{method,headers:{'Content-Type':'application/json'},body:JSON.stringify(input)});}catch{throw new Error('无法连接网站，请确认本地服务仍在运行后重试');}let data:CollegeChange&{error?:string};try{data=await response.json();}catch{throw new Error(`服务暂不可用（${response.status}），请稍后重试`);}if(!response.ok)throw new Error(data.error??'学院保存失败');return data;}
+async function request(method:string,input:unknown):Promise<CollegeChange>{return requestJson<CollegeChange>('/api/colleges',{method,headers:{'Content-Type':'application/json'},body:JSON.stringify(input)});}
 
 export function CollegeManager({colleges,yearLabel,onChanged,onReload,onOpen}:{colleges:College[];yearLabel:string;onChanged:(change:CollegeChange)=>Promise<boolean>;onReload:()=>Promise<boolean>;onOpen:(name:string)=>void}){
  const [query,setQuery]=useState(''),[editing,setEditing]=useState<College|null|undefined>(undefined),[name,setName]=useState(''),[saveError,setSaveError]=useState(''),[connectionError,setConnectionError]=useState(''),[deleting,setDeleting]=useState<College|null>(null),[busy,setBusy]=useState(false),[confirmName,setConfirmName]=useState('');

@@ -75,12 +75,19 @@ try{
 
  return base;
  };
- const testEnv=base=>({...process.env,TEST_BASE_URL:base,TEST_BOOTSTRAP_TOKEN:token,TEST_STATE_DIR:stateDir,LOAD_REPORT_DIR:path.resolve(root,'..','reports')});
- console.log('Preparing 200 distinct synthetic accounts and testing login burst…');
- await runWithWorker(['tests/burst.integration.mjs','login'],testEnv(await launch()));
- await stopWorker();worker=null;
- console.log('Restarting the isolated Worker to separate upload results from queued password checks…');
- await runWithWorker(['tests/burst.integration.mjs','upload'],testEnv(await launch()));
+ const testEnv=base=>({...process.env,TEST_BASE_URL:base,TEST_BOOTSTRAP_TOKEN:token,TEST_STATE_DIR:stateDir,LOAD_REPORT_DIR:process.env.LOAD_REPORT_DIR??path.resolve(root,'..','reports',...(process.argv.some(arg=>arg.startsWith('--stability'))?['stability-20261020']:[]))});
+ if(process.argv.some(arg=>arg.startsWith('--stability'))){
+  console.log('Preparing isolated accounts for stability verification…');
+  const stabilityBase=await launch();
+  await runWithWorker(['tests/burst.integration.mjs','seed'],testEnv(stabilityBase));
+  await runWithWorker(['tests/stability.integration.mjs',...(process.argv.includes('--stability-capacity')?['capacity']:[])],testEnv(stabilityBase));
+ }else{
+  console.log('Preparing 200 distinct synthetic accounts and testing login burst…');
+  await runWithWorker(['tests/burst.integration.mjs','login'],testEnv(await launch()));
+  await stopWorker();worker=null;
+  console.log('Restarting the isolated Worker to separate upload results from queued password checks…');
+  await runWithWorker(['tests/burst.integration.mjs','upload'],testEnv(await launch()));
+ }
 }catch(error){
  console.error(workerOutput.slice(-4000).replaceAll(token,'[test token]'));
  throw error;

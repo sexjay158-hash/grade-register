@@ -1,4 +1,5 @@
 "use client";
+import {requestJson} from '@/lib/browser-request';
 import {studentNumber} from '@/lib/student-number';
 import {useEffect,useState} from 'react';
 import {Button} from '@/components/ui/button';
@@ -10,7 +11,7 @@ import './student-grades.css';
 
 type Activity={id:string;number:number;date:string;status:string;version:number;score:number|null;state:string;editable:boolean};
 const labels:Record<string,string>={scored:'有成绩',absent:'缺席',excused:'请假',unrecorded:'未录入'};
-async function request(path:string,value?:unknown,method='POST'):Promise<any>{const r=await fetch('/api/'+path,value?{method,headers:{'Content-Type':'application/json'},body:JSON.stringify(value)}:undefined);const data:any=await r.json();if(!r.ok)throw new Error(data.error??'成绩操作失败');return data;}
+async function request(path:string,value?:unknown,method='POST'):Promise<any>{return requestJson('/api/'+path,value?{method,headers:{'Content-Type':'application/json'},body:JSON.stringify(value)}:undefined);}
 
 export function StudentGrades({student,yearId,readOnly,onClose,onChanged}:{student:Student;yearId:string;readOnly:boolean;onClose:()=>void;onChanged:()=>Promise<void>}){
  const [events,setEvents]=useState<Activity[]>([]),[canCreate,setCanCreate]=useState(false),[loading,setLoading]=useState(true),[busy,setBusy]=useState(false),[error,setError]=useState('');

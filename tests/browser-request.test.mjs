@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {requestJson,readBrowserPreference,saveBrowserPreference} from '../lib/browser-request.ts';
+import {requestJson,loginWithWaiting,readBrowserPreference,saveBrowserPreference} from '../lib/browser-request.ts';
 
 test('blocked storage and server rendering do not interrupt startup',()=>{
  const original=Object.getOwnPropertyDescriptor(globalThis,'window');
@@ -40,5 +40,26 @@ test('authentication failures are shown without retrying or hiding their status'
  const original=globalThis.fetch;let calls=0;
  try{globalThis.fetch=async()=>{calls++;return Response.json({error:'请先登录'},{status:401});};
   await assert.rejects(requestJson('/api/me'),error=>error.status===401&&error.message==='请先登录');assert.equal(calls,1);
+ }finally{globalThis.fetch=original;}
+});
+
+test('non-JSON gateway failure keeps its status and does not repeat a write',async()=>{
+ const original=globalThis.fetch;let calls=0;
+ try{globalThis.fetch=async()=>{calls++;return new Response('<html>unavailable</html>',{status:503});};
+  await assert.rejects(requestJson('/api/students',{method:'POST'}),e=>e.status===503&&/可能已保存/.test(e.message));assert.equal(calls,1);
+ }finally{globalThis.fetch=original;}
+});
+
+test('login waits only on explicit admission rejection, with a bounded and cancellable wait',async()=>{
+ const original=globalThis.fetch;let calls=0,waiting=0;
+ try{
+  globalThis.fetch=async()=>++calls===1?Response.json({code:'LOGIN_BUSY',error:'繁忙'},{status:503}):Response.json({ok:true});
+  assert.deepEqual(await loginWithWaiting({username:'test',password:'test'},()=>waiting++,undefined,{retryDelay:()=>1}),{ok:true});assert.equal(calls,2);assert.equal(waiting,1);
+  calls=0;globalThis.fetch=async()=>{calls++;return Response.json({error:'服务异常'},{status:503});};
+  await assert.rejects(loginWithWaiting({username:'test',password:'test'},()=>{},undefined,{retryDelay:()=>1}),e=>e.status===503);assert.equal(calls,1);
+  globalThis.fetch=async()=>Response.json({code:'LOGIN_BUSY'},{status:503});
+  await assert.rejects(loginWithWaiting({username:'test',password:'test'},()=>{},undefined,{maxWaitMs:1,retryDelay:()=>10}),/请稍后再次登录/);
+  const controller=new AbortController();
+  await assert.rejects(loginWithWaiting({username:'test',password:'test'},()=>controller.abort(),controller.signal,{retryDelay:()=>100}),/已取消/);
  }finally{globalThis.fetch=original;}
 });
