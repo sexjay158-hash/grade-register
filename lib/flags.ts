@@ -60,6 +60,8 @@ export const FEATURES = {
  // Disable health probes, bounded JSON parsing and the in-page recovery button.
  operationalSafety: true,
  resilientLogin: true,
+ // Restore the JavaScript login form; the startup race protection remains.
+ nativeMobileLogin: true,
  memberAccountManagement: true,
  collegeStaffDirectory: true,
  continuousPhotoUpload: true,

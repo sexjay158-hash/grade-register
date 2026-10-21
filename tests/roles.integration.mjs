@@ -39,6 +39,18 @@ const bootstrap=await fetch(base+'auth/bootstrap',{method:'POST',headers:{'Origi
 assert.equal(bootstrap.status,200,'setup token creates the first local administrator without platform login');
 admin.cookie=bootstrap.headers.get('set-cookie').split(';')[0];
 assert.equal((await call(admin,'me')).data.role,'admin');
+// Browser-native form submission must work before client JavaScript is ready.
+let native;
+for(let attempt=0;attempt<30;attempt++){
+ native=await fetch(base+'auth/login',{method:'POST',redirect:'manual',headers:{Origin:origin},body:new URLSearchParams({username:admin.username,password:testPassword})});
+ assert.equal(native.status,303);if(native.headers.get('location')!=='/login?reason=busy')break;
+ await new Promise(resolve=>setTimeout(resolve,1000));
+}
+assert.equal(native.headers.get('location'),'/');
+const nativeCookie=native.headers.get('set-cookie')?.split(';')[0];assert.ok(nativeCookie);
+assert.equal((await call({cookie:nativeCookie},'me')).data.role,'admin','native login creates the same valid session');
+const nativePage=await fetch(origin+'/login');const loginHtml=await nativePage.text();
+assert.match(loginHtml,/action="\/api\/auth\/login"/);assert.match(loginHtml,/method="post"/i);
 const health=await call(admin,'health?ready=1');
 assert.equal(health.status,200);assert.equal(health.data.dependencies.database,'ok');assert.equal(health.data.dependencies.storage,'ok');
 assert.equal((await call(outsider,'auth/login',{username:outsider.username,password:testPassword})).status,401,'unassigned visitor cannot log in');

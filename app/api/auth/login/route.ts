@@ -3,8 +3,13 @@ import {assertSameOrigin,checkLoginLimit,clearLoginFailures,findAccount,hasLocal
 import {readBody} from '@/lib/server';
 import {HttpError,failure} from '@/lib/http';
 import {acquireLoginSlot,acquireInstanceLoginSlot} from '@/lib/login-admission';
+import {handleNativeLogin} from '@/lib/native-login';
 
 export async function POST(req:Request){
+ if(FEATURES.nativeMobileLogin&&/^application\/x-www-form-urlencoded(?:;|$)/i.test(req.headers.get('content-type')??''))return handleNativeLogin(req,authenticate);
+ return authenticate(req);
+}
+async function authenticate(req:Request){
  let release:(()=>Promise<void>)|null=null;
  let releaseInstance:(()=>void)|null=null;
  const headers={'Cache-Control':'no-store'};

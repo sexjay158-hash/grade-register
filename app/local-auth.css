@@ -8,3 +8,4 @@
 .top-right button{border:0;background:transparent;color:inherit;font:inherit;padding:4px 0}.top-right button:hover{text-decoration:underline}
 .password-entry{display:flex;gap:7px}.password-entry input{min-width:0}.password-entry button{white-space:nowrap}.own-password{margin-top:20px}
 .issued-credential{display:flex;align-items:center;justify-content:space-between;gap:16px;margin:20px 0;padding:15px 17px;border:1px solid #b6d9c2;border-radius:10px;background:#f0f8f1;color:#16472e}.issued-credential p{margin:7px 0;overflow-wrap:anywhere}.issued-credential code{font-weight:700}.issued-credential small{color:#587864}
+.native-login-form input{width:100%;min-width:0;padding:10px 12px;border:1px solid #d7e2dc;border-radius:8px;background:#fff;font-size:16px;color:#173328}.native-login-form input:focus{outline:2px solid #88b59a;outline-offset:1px}.native-login-form>button{border:0;border-radius:8px;cursor:pointer;font-size:16px;font-weight:600;touch-action:manipulation}

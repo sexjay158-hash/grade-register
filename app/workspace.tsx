@@ -81,7 +81,7 @@ export default function Workspace(){
  async function initialize(){setLoading(true);setError('');try{const me:Profile=await api('me');setProfile(me);if(!FEATURES.adminRecognitionSettings||me.role==='admin'){const saved=loadOcrCredentials();if(saved){setKey(saved.apiKey);setSecret(saved.secretKey);setConfigured(true);}}else{setProvider('browser');setKey('');setSecret('');setConfigured(false);}setSelectedCollege(me.college??ALL_COLLEGES);const list:Year[]=await api('years');setYears(list);const saved=readBrowserPreference('grade-register-year'),id=list.find(y=>y.id===saved)?.id??list[0]?.id??'';if(!id)throw new Error('暂无可用学期，请联系管理员');setSelectedYear(id);if(await load(id))setInitialized(true);}catch(e){setError((e as Error).message);}finally{setLoading(false);}}
  useEffect(()=>{void initialize();},[]);
  useEffect(()=>{
-  if(!selectedYear||!profile)return;
+  if(!initialized||!selectedYear||!profile)return;
   const controller=new AbortController();
   const eligible=()=>document.visibilityState==='visible'&&navigator.onLine&&!busy&&!dirty&&!draft;
   const update=async()=>{
@@ -102,9 +102,8 @@ export default function Workspace(){
   const scheduler=scheduleRefresh(update,eligible,{baseMs:FEATURES.stabilityProtection?45000:20000});
   const wake=()=>{if(eligible())scheduler.wake();};
   window.addEventListener('focus',wake);window.addEventListener('online',wake);document.addEventListener('visibilitychange',wake);
-  if(FEATURES.collegePhotoSharing&&eligible())scheduler.wake();
   return()=>{controller.abort();scheduler.stop();window.removeEventListener('focus',wake);window.removeEventListener('online',wake);document.removeEventListener('visibilitychange',wake);};
- },[selectedYear,profile?.role,profile?.college,profile?.cohort,busy,dirty,draft]);
+ },[initialized,selectedYear,profile?.role,profile?.college,profile?.cohort,busy,dirty,draft]);
  useEffect(()=>{const handler=(e:BeforeUnloadEvent)=>{if(dirty){e.preventDefault();e.returnValue='';}};window.addEventListener('beforeunload',handler);return()=>window.removeEventListener('beforeunload',handler);},[dirty]);
  async function run(name:string,work:()=>Promise<void>){if(busy)return;setBusy(name);try{await work();}catch(e){toast.error((e as Error).message);}finally{setBusy('');}}
  async function openEvent(id:string){const d=await api('event/'+id);setDraft(d);setActivePhoto(d.photos[0]?.id??'');setDirty(false);}
