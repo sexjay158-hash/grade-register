@@ -7,6 +7,10 @@ import {setTimeout as pause} from 'node:timers/promises';
 import {fileURLToPath} from 'node:url';
 
 const root=path.resolve(fileURLToPath(new URL('..',import.meta.url)));
+const onlineOnly=process.argv.includes('--online');
+const clientsArg=process.argv.find(arg=>arg.startsWith('--clients='));
+const clients=onlineOnly?Number(clientsArg?.split('=')[1]??1000):200;
+if(!Number.isInteger(clients)||clients<1||clients>2000||clientsArg&&!onlineOnly)throw new Error('--clients=1..2000 is supported only with --online');
 const stateDir=mkdtempSync(path.join(root,'.tmp-burst-verify-'));
 const token=randomBytes(32).toString('hex');
 const wrangler=['--import','./scripts/sites-env.mjs','./node_modules/wrangler/bin/wrangler.js'];
@@ -75,8 +79,13 @@ try{
 
  return base;
  };
- const testEnv=base=>({...process.env,TEST_BASE_URL:base,TEST_BOOTSTRAP_TOKEN:token,TEST_STATE_DIR:stateDir,LOAD_REPORT_DIR:process.env.LOAD_REPORT_DIR??path.resolve(root,'..','reports',...(process.argv.some(arg=>arg.startsWith('--stability'))?['stability-20261020']:[]))});
- if(process.argv.some(arg=>arg.startsWith('--stability'))){
+ const testEnv=base=>({...process.env,TEST_BASE_URL:base,TEST_BOOTSTRAP_TOKEN:token,TEST_STATE_DIR:stateDir,TEST_CLIENTS:String(clients),LOAD_REPORT_DIR:process.env.LOAD_REPORT_DIR??path.resolve(root,'..','reports',...(onlineOnly?[`online-${clients}-${new Date().toISOString().replace(/[:.]/g,'-')}`]:process.argv.some(arg=>arg.startsWith('--stability'))?['stability-20261020']:[]))});
+ if(onlineOnly){
+  console.log(`Preparing ${clients} distinct synthetic accounts for online-only verification…`);
+  const onlineBase=await launch(),environment=testEnv(onlineBase);
+  await runWithWorker(['tests/burst.integration.mjs','seed'],environment);
+  await runWithWorker(['tests/online.integration.mjs'],environment);
+ }else if(process.argv.some(arg=>arg.startsWith('--stability'))){
   console.log('Preparing isolated accounts for stability verification…');
   const stabilityBase=await launch();
   await runWithWorker(['tests/burst.integration.mjs','seed'],testEnv(stabilityBase));

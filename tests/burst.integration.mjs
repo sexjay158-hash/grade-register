@@ -10,6 +10,8 @@ import {performance} from 'node:perf_hooks';
 const run=promisify(execFile),derive=promisify(pbkdf2),base=process.env.TEST_BASE_URL,token=process.env.TEST_BOOTSTRAP_TOKEN,state=path.resolve(process.env.TEST_STATE_DIR??'.');
 assert.ok(base&&token&&new URL(base).hostname==='127.0.0.1'&&path.dirname(state)===process.cwd()&&path.basename(state).startsWith('.tmp-burst-verify-'),'Use scripts/verify-burst.mjs with its isolated database only');
 const origin=new URL(base).origin,fixturePath=path.join(state,'fixture.json'),reportPath=path.join(process.env.LOAD_REPORT_DIR,'concurrency-200-20261020.json'),password='Burst-Test-Only-2026!',phase=process.argv[2];
+const seedClients=phase==='seed'?Number(process.env.TEST_CLIENTS??200):200;
+assert.ok(Number.isInteger(seedClients)&&seedClients>=1&&seedClients<=2000,'Synthetic account count must be 1..2000');
 const hash=value=>createHash('sha256').update(value).digest('hex');
 async function call(user,endpoint,data,timeoutMs=30000){
  const started=performance.now();
@@ -31,16 +33,16 @@ try{
   const colleges=Array.from({length:10},(_,i)=>'并发学院'+i);for(const name of colleges)await must(admin,'colleges',{name});
   const rows=Array.from({length:6000},(_,i)=>({sid:'2024'+String(i).padStart(7,'0'),name:'并发学生'+i,college:colleges[Math.floor(i/600)],group:'并发组'+Math.floor(i/30)}));
   for(let offset=0;offset<rows.length;offset+=500)await must(admin,'roster',{yearId:year,rows:rows.slice(offset,offset+500)});
-  const users=await pool(200,8,async i=>{const salt=randomBytes(16).toString('hex'),session=randomBytes(32).toString('hex');return {id:randomUUID(),username:'burst-user-'+i,college:colleges[i%10],salt,passwordHash:(await derive(password,Buffer.from(salt,'hex'),600000,32,'sha256')).toString('hex'),sessionHash:hash(session),cookie:'gr_session='+session};});
+  const users=await pool(seedClients,8,async i=>{const salt=randomBytes(16).toString('hex'),session=randomBytes(32).toString('hex');return {id:randomUUID(),username:'burst-user-'+i,college:colleges[i%10],salt,passwordHash:(await derive(password,Buffer.from(salt,'hex'),600000,32,'sha256')).toString('hex'),sessionHash:hash(session),cookie:'gr_session='+session};});
   const sql=value=>"'"+String(value).replaceAll("'","''")+"'",created=new Date().toISOString(),expires=new Date(Date.now()+86400000).toISOString();
   const statements=users.flatMap(u=>[`INSERT INTO local_accounts(id,username,password_hash,salt,iterations,role,college,cohort,active,created,updated) VALUES(${[u.id,u.username,u.passwordHash,u.salt].map(sql).join(',')},600000,'recorder',${sql(u.college)},'2024',1,${sql(created)},${sql(created)});`,`INSERT INTO local_sessions(token_hash,account_id,created,expires) VALUES(${[u.sessionHash,u.id,created,expires].map(sql).join(',')});`]);
   const file=path.join(state,'accounts.sql');fs.writeFileSync(file,statements.join('\n'));
   await run(process.execPath,['--import','./scripts/sites-env.mjs','./node_modules/wrangler/bin/wrangler.js','d1','execute','DB','--local','--config','dist/server/wrangler.json','--persist-to',state,'--file',file],{cwd:process.cwd(),windowsHide:true,maxBuffer:8*1024*1024});
-  fs.unlinkSync(file);assert.equal(new Set(users.map(u=>u.username)).size,200);assert.equal(new Set(users.map(u=>u.cookie)).size,200);
-  await pool(200,5,async i=>{const r=await must(users[i],'me');assert.equal(r.body.email,users[i].username);});
+  fs.unlinkSync(file);assert.equal(new Set(users.map(u=>u.username)).size,seedClients);assert.equal(new Set(users.map(u=>u.cookie)).size,seedClients);
+  await pool(seedClients,5,async i=>{const r=await must(users[i],'me');assert.equal(r.body.email,users[i].username);});
   const initial=await must(admin,'state?yearId='+year);assert.equal(initial.body.students.length,6000);
   fs.writeFileSync(fixturePath,JSON.stringify({admin,year,users:users.map(({username,college,cookie})=>({username,college,cookie}))}));
-  report.checks.push('200 个不同账号与 200 个不同会话逐个校验，均能读取本人身份。');
+  report.checks.push(`${seedClients} 个不同账号与 ${seedClients} 个不同会话逐个校验，均能读取本人身份。`);
   if(phase==='seed'){console.log('Synthetic fixture ready.');process.exitCode=0;}else{
   console.log('Starting 200 distinct simultaneous password logins…');const start=performance.now(),responses=await pool(200,200,i=>call(null,'auth/login',{username:users[i].username,password},20000));const row=summarize('200账号同时登录',responses,performance.now()-start,20000);report.results.push(row);console.log(JSON.stringify(row));}
  }else if(phase==='upload'){
