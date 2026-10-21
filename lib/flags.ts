@@ -30,6 +30,8 @@ export const FEATURES = {
  manualScoreEntry: true,
  editableExportPreview: true,
  activityRating: true,
+ // UI rollback only; saved five-tier ratings remain readable and keep their rates.
+ fiveLevelRating: true,
  photoRatingRecognition: true,
  manualPhotoRating: true,
  recorderActivityRating: true,

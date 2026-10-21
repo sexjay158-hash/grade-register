@@ -236,6 +236,20 @@ assert.equal((await call(rec24,'event/'+id,{version:confirmed.version,sid:sid24,
 assert.equal((await call(rec24,'event/'+id,{version:confirmed.version,sid:sid24,action:'clear'},'PATCH')).status,403,'recorder cannot clear confirmed scores');
 assert.equal((await call(rec24,'student-grades?yearId='+year+'&sid='+sid24)).data.events.find(e=>e.id===id).editable,false,'confirmed personal grade is read-only');
 assert.equal((await call(lead,'event/'+id,{version:confirmed.version,sid:sid24,score:80},'PATCH')).status,200,'college lead may edit confirmed scores');
+for(const [rating,expected] of [['excellent',80],['good',64],['pass',48],['poor',40],['none',0]]){
+ const current=(await call(lead,'event/'+id)).data;
+ const result=await call(lead,'event/'+id,{action:'rate',version:current.event.version,rating},'PUT');
+ assert.equal(result.status,200,'college lead can save tier '+rating);
+ const state=(await call(rec24,'state?yearId='+year)).data;
+ assert.equal(state.events.find(event=>event.id===id).rating,rating,'rating synchronizes to the responsible grade account');
+ for(const user of [rec24,lead]){
+  const score=(await call(user,'export?yearId='+year)).data.find(row=>row.sid===sid24);
+  assert.equal(score.score,80,'raw scores are preserved');assert.equal(score.converted_score,expected,'export uses '+rating+' multiplier');
+ }
+ assert.equal((await call(rec24,'event/'+id,{action:'rate',version:result.data.version,rating:'none'},'PUT')).status,403,'grade lead cannot alter a confirmed rating');
+}
+const ratingRestore=(await call(lead,'event/'+id)).data.event;
+assert.equal((await call(lead,'event/'+id,{action:'rate',version:ratingRestore.version,rating:'good'},'PUT')).status,200);
 assert.equal((await call(rec24,'ocr',{action:'test',apiKey:'test',secretKey:'test'})).status,403,'recorder cannot configure OCR');
 assert.equal((await call(lead,'ocr',{action:'test',apiKey:'test',secretKey:'test'})).status,403,'college lead cannot configure OCR');
 assert.deepEqual((await call(rec24,'export?yearId='+year)).data.map(row=>row.sid),[sid24]);

@@ -6,6 +6,7 @@
 - [维护、排错、备份与回退](docs/operations.md)
 - [最近容量测试及限制](tests/FULL-STABILITY-20261020.md)
 - [业务使用说明](使用说明.md)
+- [五档评级与折算规则](docs/activity-rating.md)
 
 日常修改运行 `npm run check:quick`；提交或发布前运行 `npm run check`，一次完成类型检查、单元测试、构建、角色业务和并发写入回归。集成测试使用隔离数据，完成后自动清理临时目录。
 
@@ -129,9 +130,9 @@ Use SIWC for account pages, user-specific dashboards, saved records, and write a
 
 已登记活动删除与关联数据同步上线前的源码快照是 `pre-activity-delete-sync-20260926` 和 `D:\课外锻炼\backups\source-before-activity-delete-sync-20260926.zip`。`lib/flags.ts` 的 `activityDeletion` 可关闭已登记活动的删除入口和接口；`draftDeletion` 仍单独控制草稿删除。删除时会同步清理本次成绩、评级、修改记录和独占照片，保留共用照片中其他小组的数据，并让同组后续活动序号前移。完整回退需恢复快照并重新发布；已经删除的数据不会因回退源码而恢复。
 
-批量照片等次识别上线前的源码快照是 `pre-photo-rating-20260930` 和 `D:\课外锻炼\backups\source-before-photo-rating-20260930.zip`。一次可选最多 30 张照片；在照片右上角清晰写一个“优”“良”或“合格”（也识别“及格”），系统会把该等次赋给照片匹配到的小组活动，并在草稿总表中显示按 100%、80%、60% 计算的折算分。右上角同时列出多个等级、识别不清或同组照片等级冲突时不会猜测或覆盖已有等次，应在活动详情中核对。将 `lib/flags.ts` 的 `photoRatingRecognition` 设为 `false` 可关闭自动赋等次；完整回退需恢复快照并重新发布。更新本机 RapidOCR 代码后需重启 `npm run rapidocr`。
+批量照片等次识别上线前的源码快照是 `pre-photo-rating-20260930` 和 `D:\课外锻炼\backups\source-before-photo-rating-20260930.zip`。一次可选最多 30 张照片；在照片右上角清晰写一个“优”“良”“中”“差”或“无”（旧表的“合格”“及格”兼容为“中”），系统会把该等次赋给照片匹配到的小组活动，并在草稿总表中显示按 100%、80%、60%、50%、0% 计算的折算分。右上角同时列出多个等级、识别不清或同组照片等级冲突时不会猜测或覆盖已有等次，应在活动详情中核对。将 `lib/flags.ts` 的 `photoRatingRecognition` 设为 `false` 可关闭自动赋等次；完整回退需恢复快照并重新发布。更新本机 RapidOCR 代码后需重启 `npm run rapidocr`。
 
-照片未写等次或未能识别时，可在“活动登记”的照片卡片中按小组活动选择“优／良／合格”。选择后立即保存；草稿预览折算分随之刷新，已确认活动的 Excel 导出也使用新等次。手动入口的上线前快照是 `pre-manual-photo-rating-20260930` 和 `D:\课外锻炼\backups\source-before-manual-photo-rating-20260930.zip`；将 `lib/flags.ts` 的 `manualPhotoRating` 设为 `false` 可关闭照片卡片中的入口，活动详情中的原有等次编辑仍可使用。完整回退需恢复快照并重新发布。
+照片未写等次或未能识别时，可在“活动登记”的照片卡片中按小组活动选择“优／良／中／差／无”。选择后立即保存；草稿预览折算分随之刷新，已确认活动的 Excel 导出也使用新等次。手动入口的上线前快照是 `pre-manual-photo-rating-20260930` 和 `D:\课外锻炼\backups\source-before-manual-photo-rating-20260930.zip`；将 `lib/flags.ts` 的 `manualPhotoRating` 设为 `false` 可关闭照片卡片中的入口，活动详情中的原有等次编辑仍可使用。完整回退需恢复快照并重新发布。
 
 For a D1-backed local preview, generate SQL with `npm run db:generate`. Build once through the Sites skill's build entrypoint (or `npm run build` for standalone use) to generate `dist/server/wrangler.json`, rebuilding if bindings change. From the project root, apply each pending migration in order:
 

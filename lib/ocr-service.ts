@@ -1,4 +1,5 @@
 import {bucket} from '@/lib/server';
+import {isRatingAnnotation} from './activity-rating';
 export async function recognizeStoredPhoto(owner:string,id:string,apiKey:string,secretKey:string){
  if(!apiKey||!secretKey)throw new Error('请先配置百度智能云识别服务');
  const tokenResponse=await fetch('https://aip.baidubce.com/oauth/2.0/token',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams({grant_type:'client_credentials',client_id:apiKey.trim(),client_secret:secretKey.trim()}),signal:AbortSignal.timeout(30000)});
@@ -12,7 +13,7 @@ export async function recognizeStoredPhoto(owner:string,id:string,apiKey:string,
  const located=words.filter((w:any)=>w.location&&Number.isFinite(w.location.left)&&Number.isFinite(w.location.top)),right=Math.max(0,...located.map((w:any)=>w.location.left+w.location.width)),bottom=Math.max(0,...located.map((w:any)=>w.location.top+w.location.height)),top=Math.min(bottom,...located.map((w:any)=>w.location.top));
  const inCorner=(w:any)=>right>0&&bottom>top&&w.location.left+w.location.width/2>=right*0.55&&w.location.top+w.location.height/2<=top+(bottom-top)*0.30;
  const ratingText=located.filter(inCorner).sort((a:any,b:any)=>(a.location.top-b.location.top)||(a.location.left-b.location.left)).map((w:any)=>w.words).join(' ');
- const ratingWords=new Set(located.filter((w:any)=>inCorner(w)&&/优|良|合格|及格|等次|评级|等级/.test(w.words)));
+ const ratingWords=new Set(located.filter((w:any)=>inCorner(w)&&isRatingAnnotation(w.words)));
  for(const w of words.filter((w:any)=>!ratingWords.has(w)).sort((a:any,b:any)=>(a.location?.top??0)-(b.location?.top??0))){
   if(!w.location){bands.push({y:-10000,h:0,items:[w]});continue;}
   const y=w.location.top+w.location.height/2,h=w.location.height,band=bands.find(b=>Math.abs(b.y-y)<Math.max(6,Math.min(b.h,h)*0.55));

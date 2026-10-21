@@ -50,6 +50,18 @@ def ordered_lines(result, rating_indexes=()):
     return [" ".join(item[3] for item in sorted(band["items"], key=lambda value: value[0])) for band in bands]
 
 
+def is_rating_annotation(text):
+    if re.search(r"等次|评级|等级|级别|不\s*(?:合格|及格)", text):
+        return True
+    aliases = r"优秀|良好|中等|合格|及格|优|良|中|差|无"
+    boundary = r"[\u3400-\u9fffA-Za-z0-9]"
+    text = re.sub(
+        r"(?:评定级别|评定等级|活动等次|活动评级|评级|等级|级别|等次|评定)[\s：:]*(?=(?:" + aliases + r")(?!" + boundary + r"))",
+        " ", text,
+    )
+    return bool(re.search(r"(?<!" + boundary + r")(?:" + aliases + r")(?!" + boundary + r")", text))
+
+
 def top_right_rating_text(result, data):
     boxes = getattr(result, "boxes", None)
     texts = getattr(result, "txts", None)
@@ -68,7 +80,7 @@ def top_right_rating_text(result, data):
         center_y = sum(float(point[1]) for point in box) / len(box)
         if center_x >= width * 0.55 and center_y <= height * 0.30:
             found.append((center_y, center_x, text.strip()))
-            if re.search(r"优|良|合格|及格|等次|评级|等级", text):
+            if is_rating_annotation(text):
                 rating_indexes.add(index)
     return " ".join(item[2] for item in sorted(found)), rating_indexes
 

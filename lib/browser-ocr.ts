@@ -1,4 +1,5 @@
 import type {OcrResultItem} from '@paddleocr/paddleocr-js';
+import {isRatingAnnotation} from './activity-rating';
 
 type BrowserOcr=Awaited<ReturnType<typeof import('@paddleocr/paddleocr-js')['PaddleOCR']['create']>>;
 let enginePromise:Promise<BrowserOcr>|null=null;
@@ -26,7 +27,7 @@ export function arrangeBrowserOcr(items:OcrResultItem[],width:number,height:numb
  const positioned=items.map(bounds).filter((item):item is Positioned=>!!item);
  const ratingItems=positioned.filter(item=>item.x>=width*0.55&&item.y<=height*0.30).sort((a,b)=>a.y-b.y||a.x-b.x);
  const ratingText=ratingItems.map(item=>item.text).join(' ');
- const ratingIndexes=new Set(ratingItems.filter(item=>/优|良|合格|及格|等次|评级|等级/.test(item.text)).map(item=>item.index));
+ const ratingIndexes=new Set(ratingItems.filter(item=>isRatingAnnotation(item.text)).map(item=>item.index));
  const bands:{y:number;height:number;items:Positioned[]}[]=[];
  for(const item of positioned.filter(item=>!ratingIndexes.has(item.index)).sort((a,b)=>a.y-b.y)){
   const band=bands.find(candidate=>Math.abs(candidate.y-item.y)<Math.max(6,Math.min(candidate.height,item.height)*0.55));
