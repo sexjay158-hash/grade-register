@@ -1,6 +1,7 @@
 import {FEATURES} from '@/lib/flags';
 import {assertSameOrigin,checkLoginLimit,clearLoginFailures,findAccount,hasLocalAdmin,newSession,normalizeUsername,recordLoginFailure,verifyPassword} from '@/lib/local-auth';
 import {readBody} from '@/lib/server';
+import {HttpError,failure} from '@/lib/http';
 import {acquireLoginSlot,acquireInstanceLoginSlot} from '@/lib/login-admission';
 
 export async function POST(req:Request){
@@ -26,6 +27,6 @@ export async function POST(req:Request){
   if(!await verifyPassword(password,account)||!account?.active){await recordLoginFailure(limit.key);return Response.json({error:'账号或密码不正确'},{status:401,headers:{'Cache-Control':'no-store'}});}
   await clearLoginFailures(limit.key);
   return Response.json({ok:true,role:account.role},{headers:{'Set-Cookie':await newSession(account.id,req,account),'Cache-Control':'no-store'}});
- }catch{return Response.json({error:'登录服务暂不可用，请稍后重试'},{status:503,headers});}
+ }catch(error){if(error instanceof HttpError)return failure(error);return Response.json({error:'登录服务暂不可用，请稍后重试'},{status:503,headers});}
  finally{try{if(release)await release();}catch{console.error('Login verification lease cleanup failed');}finally{releaseInstance?.();}}
 }

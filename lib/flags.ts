@@ -47,6 +47,8 @@ export const FEATURES = {
  stabilityProtection: true,
  // Restore legacy write paths only as part of a deliberate source rollback.
  atomicMutations: true,
+ // Disable health probes, bounded JSON parsing and the in-page recovery button.
+ operationalSafety: true,
  resilientLogin: true,
  memberAccountManagement: true,
  collegeStaffDirectory: true,

@@ -5,7 +5,7 @@ import {randomUUID} from 'node:crypto';
 const base=process.env.TEST_BASE_URL,token=process.env.TEST_BOOTSTRAP_TOKEN;
 assert.ok(base&&token&&new URL(base).hostname==='127.0.0.1','Use the isolated verification harness');
 const origin=new URL(base).origin,password='Race-Test-Only-2026!',admin={cookie:''},college='事务稳定性测试学院';
-const report={date:'2026-10-20',checks:[],transportErrors:[]};
+const report={date:new Date().toISOString().slice(0,10),checks:[],transportErrors:[]};
 async function call(user,endpoint,data,method=data===undefined?'GET':'POST'){
  const headers={Origin:origin,Connection:'close'};if(user?.cookie)headers.Cookie=user.cookie;if(data&&!(data instanceof FormData))headers['Content-Type']='application/json';
  const response=await fetch(base+endpoint,{method,headers,body:data===undefined?undefined:data instanceof FormData?data:JSON.stringify(data),signal:AbortSignal.timeout(30000)});
@@ -81,6 +81,6 @@ try{
  assert.equal(report.transportErrors.length,0,'recorded transport faults must not be reported as a clean run');
 }catch(error){report.failure=error.message;throw error;}finally{
  const dir=process.env.STABILITY_REPORT_DIR;fs.mkdirSync(dir,{recursive:true});fs.writeFileSync(path.join(dir,'races.json'),JSON.stringify(report,null,2)+'\n');
- fs.writeFileSync(path.join(dir,'races.md'),['# 全面稳定性回归（2026-10-20）','','独立本地 Worker/D1/R2，合成名单与照片；未读取或修改业务数据。','',...report.checks.map(c=>'- '+c),'',`服务传输错误：${report.transportErrors.length}。`,...(report.failure?['','失败：'+report.failure]:[]),'','范围：短时并发与事务一致性；不能代替公网、长期运行、真实手机 OCR 或实际备份恢复验证。'].join('\n')+'\n');
+ fs.writeFileSync(path.join(dir,'races.md'),[`# 全面稳定性回归（${report.date}）`,'','独立本地 Worker/D1/R2，合成名单与照片；未读取或修改业务数据。','',...report.checks.map(c=>'- '+c),'',`服务传输错误：${report.transportErrors.length}。`,...(report.failure?['','失败：'+report.failure]:[]),'','范围：短时并发与事务一致性；不能代替公网、长期运行、真实手机 OCR 或实际备份恢复验证。'].join('\n')+'\n');
  console.log('REPORT '+path.join(dir,'races.md'));
 }

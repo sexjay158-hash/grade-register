@@ -33,10 +33,14 @@ async function call(user,path,data,method=data===undefined?'GET':'POST'){
  return {status:response.status,data:type.includes('json')?await response.json():await response.arrayBuffer(),cookie:response.headers.get('set-cookie')?.split(';')[0]??''};
 }
 assert.equal((await call(outsider,'state')).status,401,'anonymous visitor cannot read school data');
+assert.equal((await call(outsider,'health')).status,200,'public liveness does not require a session');
+assert.equal((await call(outsider,'health?ready=1')).status,401,'dependency checks require authentication');
 const bootstrap=await fetch(base+'auth/bootstrap',{method:'POST',headers:{'Origin':origin,'Content-Type':'application/json'},body:JSON.stringify({setupToken,username:admin.username,password:testPassword}),signal:AbortSignal.timeout(15000)});
 assert.equal(bootstrap.status,200,'setup token creates the first local administrator without platform login');
 admin.cookie=bootstrap.headers.get('set-cookie').split(';')[0];
 assert.equal((await call(admin,'me')).data.role,'admin');
+const health=await call(admin,'health?ready=1');
+assert.equal(health.status,200);assert.equal(health.data.dependencies.database,'ok');assert.equal(health.data.dependencies.storage,'ok');
 assert.equal((await call(outsider,'auth/login',{username:outsider.username,password:testPassword})).status,401,'unassigned visitor cannot log in');
 const year=(await call(admin,'years')).data[0].id;
 for(const name of [collegeA,collegeB])assert.equal((await call(admin,'colleges',{name})).status,200);
@@ -56,6 +60,7 @@ for(const [user,role,cohort] of [[lead,'college_lead',null],[rec24,'recorder','2
  const login=await call(user,'auth/login',{username:user.username,password:testPassword});assert.equal(login.status,200);user.cookie=login.cookie;
 }
 const full=(await call(admin,'state?yearId='+year)).data;
+for(const user of [lead,rec24,rec25])assert.equal((await call(user,'health?ready=1')).status,403,'staff cannot inspect administrator dependency checks');
 // Cached initialization must not cache responsibility: number edits and removals invalidate it.
 const revisionYear=(await call(admin,'years',{label:'年级重算-'+nonce})).data.id;
 const revisionRows=[{sid:'2024'+nonce+'rev1',name:'重算甲',college:collegeA,group:'重算组'},{sid:'2024'+nonce+'rev2',name:'重算乙',college:collegeA,group:'重算组'},{sid:'2025'+nonce+'rev3',name:'重算丙',college:collegeA,group:'重算组'}];

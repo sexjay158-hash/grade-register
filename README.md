@@ -1,3 +1,20 @@
+# 课外锻炼成绩管理
+
+学校课外活动的学生名单、成绩、照片识别、院级与年级权限、学期归档管理应用。
+
+- [代码结构与扩展约定](docs/architecture.md)
+- [维护、排错、备份与回退](docs/operations.md)
+- [最近容量测试及限制](tests/FULL-STABILITY-20261020.md)
+- [业务使用说明](使用说明.md)
+
+日常修改运行 `npm run check:quick`；提交或发布前运行 `npm run check`，一次完成类型检查、单元测试、构建、角色业务和并发写入回归。集成测试使用隔离数据，完成后自动清理临时目录。
+
+稳定性受部署资源、网络、设备和服务配额影响，不能保证永不故障。目前集中登录仍有已知容量限制，详见测试报告。本仓库只备份源码，不保存学校业务数据库与照片。
+
+---
+
+以下保留底层框架和历史运行说明。
+
 # vinext-starter
 
 A clean full-stack starter running on [vinext](https://github.com/cloudflare/vinext), with optional Cloudflare D1 and Drizzle support.

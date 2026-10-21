@@ -72,7 +72,7 @@ try{
  for(const stream of [worker.stdout,worker.stderr])stream.on('data',chunk=>{workerOutput=(workerOutput+chunk.toString()).slice(-10000);});
  await waitForWorker(`http://127.0.0.1:${port}/login`);
  console.log('Checking account setup, three roles, rosters, grades, photos and exports…');
- console.log(await runWithWorker([process.argv.includes('--races')?'tests/stability-races.integration.mjs':'tests/roles.integration.mjs'],{...process.env,TEST_BASE_URL:base,TEST_BOOTSTRAP_TOKEN:token,STABILITY_REPORT_DIR:process.env.STABILITY_REPORT_DIR??path.resolve(root,'..','reports','full-stability-20261020')}));
+ console.log(await runWithWorker([process.argv.includes('--races')?'tests/stability-races.integration.mjs':'tests/roles.integration.mjs'],{...process.env,TEST_BASE_URL:base,TEST_BOOTSTRAP_TOKEN:token,STABILITY_REPORT_DIR:process.env.STABILITY_REPORT_DIR??path.resolve(root,'..','reports',`verification-${new Date().toISOString().slice(0,10)}`)}));
 }catch(error){
  console.error(workerOutput.slice(-4000).replaceAll(token,'[test token]'));
  throw error;

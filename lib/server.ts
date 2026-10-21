@@ -1,8 +1,13 @@
 import {env} from 'cloudflare:workers';
 import {FEATURES} from './flags';
-export async function readBody(req:Request):Promise<Record<string,any>>{const raw=await req.text();if(raw.length>2000000)throw new Error('请求内容过大');const value=JSON.parse(raw);if(!value||typeof value!=='object'||Array.isArray(value))throw new Error('请求格式不正确');return value;}
-export function db(){if(!env.DB)throw new Error('数据服务暂不可用，请稍后重试');return env.DB;}
-export function bucket(){if(!env.BUCKET)throw new Error('照片存储暂不可用，请稍后重试');return env.BUCKET;}
+import {HttpError,readJsonBody} from './http';
+export {json,failure} from './http';
+export async function readBody(req:Request):Promise<Record<string,any>>{
+ if(FEATURES.operationalSafety)return readJsonBody(req);
+ const raw=await req.text();if(raw.length>2000000)throw new Error('请求内容过大');const value=JSON.parse(raw);if(!value||typeof value!=='object'||Array.isArray(value))throw new Error('请求格式不正确');return value;
+}
+export function db(){if(!env.DB)throw new HttpError(503,'SERVICE_UNAVAILABLE','数据服务暂不可用，请稍后重试');return env.DB;}
+export function bucket(){if(!env.BUCKET)throw new HttpError(503,'SERVICE_UNAVAILABLE','照片存储暂不可用，请稍后重试');return env.BUCKET;}
 export {SCHOOL_OWNER} from './school-identity';
 import {SCHOOL_OWNER} from './school-identity';
 import {accountFromRequest} from './local-auth';
@@ -34,6 +39,4 @@ export async function owner(req:Request){return (await access(req)).owner;}
 export function requireAdmin(a:Access){if(a.role!=='admin')throw new Error('无权限：仅管理员可以操作');}
 export function requireEditor(a:Access){if(!['admin','college_lead','recorder'].includes(a.role))throw new Error('无权限：不能编辑成绩');}
 export const now=()=>new Date().toISOString();
-export function json(data:unknown,status=200){return Response.json(data,{status,headers:{'Cache-Control':'no-store'}});}
-export function failure(e:unknown){const msg=e instanceof Error?e.message:'操作失败';console.error('request failed',msg.startsWith('D1_')?'database error':msg);return json({error:msg.startsWith('D1_')?'保存遇到冲突，请刷新后重试':msg},msg.includes('登录')?401:msg.includes('无权限')||msg.includes('尚未获得使用权限')||msg.includes('已绑定其他账号')?403:400);}
 export async function getEvent(id:string,user:string){const e=await db().prepare('SELECT * FROM events WHERE id=? AND owner=?').bind(id,user).first<any>();if(!e)throw new Error('找不到该活动');return e;}
