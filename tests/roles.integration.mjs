@@ -135,6 +135,7 @@ assert.equal((await call(lead,'intake',{id:pendingDelete},'DELETE')).status,403,
 assert.equal((await call(rec25,'intake/photo/'+pendingDelete)).status,200,'rejected deletion preserves photo');
 const countBeforeDelete=(await call(rec25,'state?yearId='+mixedYear)).data.intake.length;
 assert.equal((await call(rec25,'intake',{id:pendingDelete},'DELETE')).data.deleted,true);
+assert.ok(!(await call(rec25,'state?yearId='+mixedYear)).data.todos.some(todo=>todo.target.type==='photo'&&todo.target.id===pendingDelete),'deleting an unassigned photo removes its todo');
 assert.equal((await call(rec25,'state?yearId='+mixedYear)).data.intake.length,countBeforeDelete-1,'deletion updates photo counts');
 assert.equal((await call(rec25,'intake/photo/'+pendingDelete)).status,400,'deleted upload cannot be fetched');
 assert.equal((await call(rec25,'intake/process',{id:pendingDelete,recognizedLines:['任意名字 88']})).status,400,'deleted upload cannot be recognized later');
@@ -199,9 +200,12 @@ assert.equal((await call(lead,'group-cohorts',{yearId:mixedYear,groupId:tieGroup
 assert.equal((await call(rec24,'state?yearId='+mixedYear)).data.students.length,2);
 const created=await call(rec24,'events',{groupId:group.id,date:'2026-10-02'});assert.equal(created.status,200);
 const id=created.data.id;
+assert.equal((await call(rec24,'state?yearId='+year)).data.todos.find(todo=>todo.target.type==='event'&&todo.target.id===id).reason,'scores_missing');
 const detail=(await call(rec24,'event/'+id)).data;
 assert.equal((await call(rec24,'event/'+id,{action:'save',version:detail.event.version,rows:[{sid:sid25,state:'scored',score:91}]},'PUT')).status,400,'recorder cannot submit a student from a different assigned group');
 const saved=await call(rec24,'event/'+id,{action:'save',version:detail.event.version,rows:[{sid:sid24,state:'scored',score:80}]},'PUT');assert.equal(saved.status,200);
+for(const user of [rec24,lead])assert.equal((await call(user,'state?yearId='+year)).data.todos.find(todo=>todo.target.type==='event'&&todo.target.id===id).reason,'rating_missing','responsible staff share the same unfinished activity');
+assert.ok(!(await call(rec25,'state?yearId='+year)).data.todos.some(todo=>todo.target.type==='event'&&todo.target.id===id),'another grade does not see the activity todo');
 assert.equal((await call(rec25,'event/'+id)).status,403,'another group owner cannot read event detail');
 assert.equal((await call(rec25,'event/'+id,{version:saved.data.version,sid:sid24,score:100},'PATCH')).status,403,'recorder cannot edit another cohort');
 assert.equal((await call(rec24,'student-grades?yearId='+year+'&sid='+sid24)).data.events.find(e=>e.id===id).score,80,'personal grade list returns own score');
@@ -223,6 +227,7 @@ assert.equal((await call(admin,'event/'+id)).status,200,'personal score clearing
 const restoredScore=await call(rec24,'event/'+id,{version:personalVersion,sid:sid24,state:'scored',score:80},'PATCH');assert.equal(restoredScore.status,200);personalVersion=restoredScore.data.version;
 const clearedOther=await call(lead,'event/'+id,{version:personalVersion,sid:sidOther24,action:'clear'},'PATCH');assert.equal(clearedOther.status,200);personalVersion=clearedOther.data.version;
 assert.equal((await call(lead,'event/'+id,{action:'rate',version:personalVersion,rating:'excellent'},'PUT')).status,200,'college lead may set own-college activity rating');
+assert.equal((await call(rec24,'state?yearId='+year)).data.todos.find(todo=>todo.target.type==='event'&&todo.target.id===id).reason,'awaiting_confirmation');
 const png=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aWlUAAAAASUVORK5CYII=','base64');
 const form=new FormData();form.set('eventId',id);form.set('file',new Blob([png,Buffer.from(nonce)],{type:'image/png'}),'sample.png');
 const photo=await call(rec24,'photos',form);assert.equal(photo.status,200);
@@ -242,6 +247,7 @@ for(const [rating,expected] of [['excellent',80],['good',64],['pass',48],['poor'
  assert.equal(result.status,200,'college lead can save tier '+rating);
  const state=(await call(rec24,'state?yearId='+year)).data;
  assert.equal(state.events.find(event=>event.id===id).rating,rating,'rating synchronizes to the responsible grade account');
+ assert.ok(!state.todos.some(todo=>todo.target.type==='event'&&todo.target.id===id),'confirmed activities do not return to the todo list');
  for(const user of [rec24,lead]){
   const score=(await call(user,'export?yearId='+year)).data.find(row=>row.sid===sid24);
   assert.equal(score.score,80,'raw scores are preserved');assert.equal(score.converted_score,expected,'export uses '+rating+' multiplier');
@@ -258,6 +264,8 @@ assert.deepEqual((await call(lead,'export?yearId='+year)).data.map(row=>row.sid)
 // Recognition must match only the recorder's assigned college and cohort.
 const intakeForm=new FormData();intakeForm.set('batchId',crypto.randomUUID());intakeForm.set('date','2026-10-03');intakeForm.set('yearId',year);intakeForm.set('file',new Blob([png,Buffer.from(nonce+'intake')],{type:'image/png'}),'mixed-cohorts.png');
 const uploaded=await call(rec24,'intake',intakeForm);assert.equal(uploaded.status,200);
+assert.ok((await call(rec24,'state?yearId='+year)).data.todos.some(todo=>todo.target.type==='photo'&&todo.target.id===uploaded.data.id));
+assert.ok(!(await call(rec25,'state?yearId='+year)).data.todos.some(todo=>todo.target.type==='photo'&&todo.target.id===uploaded.data.id),'another grade cannot discover an unassigned photo via todos');
 const recognized=await call(rec24,'intake/process',{id:uploaded.data.id,recognizedLines:[sid24+' 甲一 88',sid25+' 甲二 99',sidB+' 乙一 95']});assert.equal(recognized.status,200);assert.equal(recognized.data.matched,1);
 const latest=(await call(admin,'state?yearId='+year)).data;
 const next=latest.events.find(event=>event.group_id===group.id&&event.number===2);assert.ok(next);
@@ -276,6 +284,7 @@ assert.deepEqual(partialState.grades.filter(grade=>partialEvents.includes(grade.
 assert.equal((await call(lead,'intake/photo/'+cross.data.id)).status,403);
 assert.equal((await call(lead,'event/'+next.id)).data.photos.some(photo=>photo.id===cross.data.id),false);
 assert.equal((await call(lead,'state?yearId='+year)).data.intake.some(photo=>photo.id===cross.data.id),false);
+assert.ok(!(await call(lead,'state?yearId='+year)).data.todos.some(todo=>todo.target.type==='photo'&&todo.target.id===cross.data.id),'cross-college photo metadata is not exposed through todos');
 const foreignGroup=full.groups.find(row=>row.college===collegeB);
 assert.equal((await call(lead,'events',{groupId:foreignGroup.id,date:'2026-10-03'})).status,403,'college lead cannot create another college activity');
 assert.equal((await call(lead,'students',{yearId:year,sid:sidB},'DELETE')).status,403,'college lead cannot remove another college student');
@@ -454,6 +463,7 @@ assert.equal((await call(archiveRecorder,'state?yearId='+archiveYear)).status,40
 assert.equal((await call(archiveRecorder,'students',{yearId:archiveYear,sid:sidB},'DELETE')).status,403);
 assert.equal((await call(archiveLead,'event/'+archiveEvent)).status,403);
 const historyAfter=(await call(admin,'state?yearId='+archiveYear)).data;
+assert.deepEqual(historyAfter.todos,[],'archived semesters never create actionable todos');
 assert.deepEqual(historyAfter.students,historyBefore.students);
 assert.deepEqual(historyAfter.grades,historyBefore.grades);
 assert.deepEqual(historyAfter.events,historyBefore.events);

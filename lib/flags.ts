@@ -15,6 +15,8 @@ export const FEATURES = {
  comfortHeader: true,
  // Set false to restore the shared heading, filters and statistics on every tab.
  independentPages: true,
+ // Restore the previous landing page without changing stored school data.
+ todoDashboard: true,
  sixCharacterPasswords: true,
  mobileLanPreview: true,
  mobileUsability: true,

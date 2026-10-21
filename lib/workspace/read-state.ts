@@ -6,6 +6,7 @@ import {ensureActivityRatings} from '../activity-rating-store';
 import {cohortExpr,scopeCohortExpr,cohortJoin} from '../role-scope';
 import type {GroupRow,StudentRow,EventRow,IntakeRow,GradeRow,LinkRow,ActorRow} from './types';
 import {projectWorkspace} from './projection';
+import {buildWorkspaceTodos} from './todos';
 
 // Query orchestration stays server-only; projection is independently testable.
 export async function readWorkspaceState(a:Access,yearId:string){
@@ -34,5 +35,6 @@ export async function readWorkspaceState(a:Access,yearId:string){
    )`).bind(u,yearId,yearId))
  ]);
  const semester=await d.prepare('SELECT y.id,y.label,y.created,ar.archived_at FROM roster_years y LEFT JOIN semester_archives ar ON ar.owner=y.owner AND ar.year_id=y.id WHERE y.owner=? AND y.id=?').bind(u,yearId).first();
- return {yearId,semester,...projectWorkspace(a,{colleges:allColleges,groups:g.results,students:s.results,events:e.results,intake:i.results,grades:grades.results,links:links.results,actors:actors.results},FEATURES.groupCohortScope)};
+ const visible=projectWorkspace(a,{colleges:allColleges,groups:g.results,students:s.results,events:e.results,intake:i.results,grades:grades.results,links:links.results,actors:actors.results},FEATURES.groupCohortScope);
+ return {yearId,semester,...visible,todos:FEATURES.todoDashboard?buildWorkspaceTodos(visible,a.role,!!semester?.archived_at):[]};
 }

@@ -7,6 +7,7 @@
 - [最近容量测试及限制](tests/FULL-STABILITY-20261020.md)
 - [业务使用说明](使用说明.md)
 - [五档评级与折算规则](docs/activity-rating.md)
+- [我的待办与回退说明](docs/todo-dashboard.md)
 
 日常修改运行 `npm run check:quick`；提交或发布前运行 `npm run check`，一次完成类型检查、单元测试、构建、角色业务和并发写入回归。集成测试使用隔离数据，完成后自动清理临时目录。
 

@@ -1,9 +1,10 @@
 "use client";
 import type {ReactNode} from 'react';
-import {Building2,CalendarDays,FileSpreadsheet,Settings2,ShieldCheck,Upload,Users} from 'lucide-react';
+import {Building2,CalendarDays,ClipboardList,FileSpreadsheet,Settings2,ShieldCheck,Upload,Users} from 'lucide-react';
 import {FEATURES} from '@/lib/flags';
 
 const pages = {
+ todos: {title:'我的待办',description:'查看照片核对、评级和活动确认，按负责范围逐项处理。',icon:ClipboardList},
  register: {title:'活动登记',description:'上传成绩照片，核对识别结果；也可以手动补录。',icon:Upload},
  preview: {title:'成绩总表与导出',description:'在总表中查看、修改原始分和折算分，核对后导出 Excel。',icon:FileSpreadsheet},
  roster: {title:'学生名单',description:'按学期保存名单，在这里导入、查找和维护学生信息。',icon:Users},
