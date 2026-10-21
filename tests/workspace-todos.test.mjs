@@ -45,6 +45,13 @@ test('unmatched own photos inherit staff scope; administrator unmatched photos r
  const staff=buildWorkspaceTodos(rows,'recorder')[0];assert.deepEqual(staff.colleges,['甲院']);assert.equal(staff.reason,'photo_pending');
  assert.deepEqual(buildWorkspaceTodos(rows,'admin')[0].colleges,[]);
 });
+
+test('shared pending-photo todo uses captured college and explains lead view-only access',()=>{
+ const rows=source();rows.events=[];rows.intake=[{id:'p',name:'待识别.png',status:'pending',group_id:null,event_id:null,upload_college:'甲院',read_only:true}];
+ const todo=buildWorkspaceTodos(rows,'college_lead')[0];
+ assert.deepEqual(todo.colleges,['甲院']);assert.match(todo.detail,/上传者/);
+ assert.deepEqual(buildWorkspaceTodos(rows,'admin')[0].colleges,['甲院']);
+});
 test('todos use authorized projection, preserving college isolation and the mixed-cohort group rule',()=>{
  const rows={colleges:[{id:'a',name:'甲院',active:1},{id:'b',name:'乙院',active:1}],groups:[group,{id:'g24',name:'同名组',college:'甲院'},{id:'gb',name:'同名组',college:'乙院'}],
  students:[{sid:'older',name:'随组学生',college:'甲院',group_id:'g25',position:0,cohort:'2024',management_cohort:'2025'},{sid:'s24',name:'24级',college:'甲院',group_id:'g24',position:1,cohort:'2024',management_cohort:'2024'},{sid:'sb',name:'乙院',college:'乙院',group_id:'gb',position:2,cohort:'2025',management_cohort:'2025'}],

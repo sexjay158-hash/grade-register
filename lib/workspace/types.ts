@@ -5,7 +5,7 @@ import type {College} from '../colleges';
 export type GroupRow = {id:string; name:string; college:string; responsible_cohort?:string|null};
 export type StudentRow = {sid:string; name:string; college:string; group_id:string; position:number; cohort:string; management_cohort:string};
 export type EventRow = {id:string; group_id:string; recorded:number; status?:string; photos?:number;number?:number;date?:string;rating?:string|null};
-export type IntakeRow = {id:string; group_id:string|null; event_id:string|null; matched:number; status:string;name?:string;date?:string;unresolved?:number;error?:string};
+export type IntakeRow = {id:string; group_id:string|null; event_id:string|null; matched:number; status:string;name?:string;date?:string;unresolved?:number;error?:string;upload_college?:string|null;read_only?:boolean};
 export type GradeRow = {sid:string; event_id:string; group_id:string};
 export type LinkRow = {intake_id:string; event_id:string; group_id:string; matched:number};
 export type ActorRow = {kind:string; id:string; account_id:string; event_id:string|null};

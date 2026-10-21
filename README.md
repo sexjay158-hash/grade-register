@@ -197,3 +197,7 @@ The portable build runs Vinext directly without a host `timeout` command. The ma
 ## 小组活动档案
 
 打开“小组活动”，按组查看当前学期的每次活动、日期、评级和照片，点击进入原成绩表。详见 [使用与回退说明](docs/group-activities.md)。
+
+## 照片与活动共享同步
+
+年级负责人保存的照片、活动、成绩和评级由院负责人及管理员按权限共同查看；新增未归组照片也记录上传学院并提供院负责人只读查看。页面显示最近同步时间，可手动同步。历史未归组照片、同步间隔和回退方式见 [同步说明](docs/shared-data-sync.md)。

@@ -66,3 +66,16 @@ test('large photo sets keep exact counts and deduplicate only within the same ev
  assert.equal(result.events[0].photos,5000);assert.equal(result.intakeLinks.length,5000);
  assert.equal(result.intake.reduce((sum,row)=>sum+row.matched,0),10000);
 });
+
+
+test('unassigned staff photos sync to the captured college lead, never another cohort or college',()=>{
+ const rows=fixture();rows.intake.push({id:'shared',group_id:null,event_id:null,matched:0,status:'needs_review',upload_college:'甲院'});
+ rows.actors.push({kind:'intake',id:'shared',account_id:'old-uploader',event_id:null});
+ const lead=projectWorkspace({...recorder,role:'college_lead'},rows,true);
+ assert.equal(lead.intake.find(row=>row.id==='shared').read_only,true);
+ assert.ok(!projectWorkspace({...recorder,role:'college_lead',college:'乙院'},rows,true).intake.some(row=>row.id==='shared'));
+ assert.ok(!projectWorkspace(recorder,rows,true).intake.some(row=>row.id==='shared'));
+ assert.ok(projectWorkspace({...recorder,role:'admin'},rows,true).intake.some(row=>row.id==='shared'));
+ rows.intake.find(row=>row.id==='cross').upload_college='甲院';
+ assert.ok(!projectWorkspace({...recorder,role:'college_lead'},rows,true).intake.some(row=>row.id==='cross'),'linked cross-college content overrides upload metadata');
+});

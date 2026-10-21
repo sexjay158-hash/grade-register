@@ -32,7 +32,7 @@ export function projectWorkspace(a:WorkspaceAccess,rows:WorkspaceRows,groupCohor
    if(groupCohortScope&&(related.length||row.group_id))return related.length?related.every(link=>groupIds.has(link.group_id)):groupIds.has(row.group_id!);
    return actorById.get(row.id)===a.userId;
   }
-  return related.length?related.every(link=>groupCollege.get(link.group_id)===a.college):row.group_id?groupCollege.get(row.group_id)===a.college:actorById.get(row.id)===a.userId;
+  return related.length?related.every(link=>groupCollege.get(link.group_id)===a.college):row.group_id?groupCollege.get(row.group_id)===a.college:actorById.get(row.id)===a.userId||!!row.upload_college&&row.upload_college===a.college;
  });
  const intakeIds=new Set(intake.map(row=>row.id));
  const matchedByIntake=new Map<string,number>();
@@ -49,7 +49,7 @@ export function projectWorkspace(a:WorkspaceAccess,rows:WorkspaceRows,groupCohor
  const colleges=(a.role==='admin'?rows.colleges:rows.colleges.filter(row=>row.name===a.college)).map(row=>a.role==='recorder'?{...row,students:students.length,groups:groups.length,events:events.filter(event=>event.status==='committed').length,drafts:events.filter(event=>event.status==='draft').length}:row);
  return {
   colleges,groups,students,events,grades,
-  intake:a.role==='recorder'?intake.map(row=>({...row,matched:matchedByIntake.get(row.id)??0})):intake,
+  intake:intake.map(row=>a.role==='recorder'?{...row,matched:matchedByIntake.get(row.id)??0}:a.role==='college_lead'&&!row.group_id&&!linksByIntake.get(row.id)?.length&&actorById.get(row.id)!==a.userId?{...row,read_only:true}:row),
   intakeLinks:visibleLinks.filter(link=>intakeIds.has(link.intake_id)).map(link=>a.role==='recorder'?{...link,matched:gradeCounts.get(link.event_id)??0}:link),
  };
 }

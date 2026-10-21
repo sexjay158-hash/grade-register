@@ -10,7 +10,7 @@ type TodoSource={
  colleges:{name:string;active:number}[];
  groups:{id:string;name:string;college:string}[];
  events:{id:string;group_id:string;status?:string;recorded:number;number?:number;date?:string;rating?:string|null}[];
- intake:{id:string;name?:string;date?:string;status:string;group_id:string|null;event_id:string|null;unresolved?:number;error?:string}[];
+ intake:{id:string;name?:string;date?:string;status:string;group_id:string|null;event_id:string|null;unresolved?:number;error?:string;upload_college?:string|null;read_only?:boolean}[];
  intakeLinks:{intake_id:string;event_id:string;group_id:string}[];
 };
 
@@ -38,8 +38,8 @@ export function buildWorkspaceTodos(source:TodoSource,role:TodoRole,archived=fal
   const relatedGroups=[...groupIds].map(id=>groups.get(id)!);
   todos.push({
    id:'photo:'+photo.id,kind:'photo',reason:conflict?'photo_conflict':photo.status==='pending'?'photo_pending':'photo_review',
-   title:photo.name??'成绩照片',date:photo.date??'',colleges:relatedGroups.length?[...new Set(relatedGroups.map(group=>group.college))]:role==='admin'?[]:[...activeColleges],groupNames:relatedGroups.map(group=>group.name),
-   detail:error||(photo.unresolved?`${photo.unresolved} 行需要核对，请对照原图检查。`:'尚未完成识别，请核对照片后重试；错传的照片可按现有权限删除。'),
+   title:photo.name??'成绩照片',date:photo.date??'',colleges:relatedGroups.length?[...new Set(relatedGroups.map(group=>group.college))]:photo.upload_college?[photo.upload_college]:role==='admin'?[]:[...activeColleges],groupNames:relatedGroups.map(group=>group.name),
+   detail:photo.read_only?'本院照片已同步；尚未归组，由上传者继续识别或管理员处理。':error||(photo.unresolved?`${photo.unresolved} 行需要核对，请对照原图检查。`:'尚未完成识别，请核对照片后重试；错传的照片可按现有权限删除。'),
    target:{type:'photo',id:photo.id},
   });
  }

@@ -130,6 +130,14 @@ async function deletionPhoto(user,yearId,label){
  const response=await call(user,'intake',form);assert.equal(response.status,200,JSON.stringify(response.data));return response.data.id;
 }
 const pendingDelete=await deletionPhoto(rec25,mixedYear,'pending-delete');
+for(const viewer of [lead,admin]){
+ const syncState=(await call(viewer,'state?yearId='+mixedYear)).data;
+ assert.ok(syncState.intake.some(photo=>photo.id===pendingDelete),'lead/admin see pending recorder photo before recognition');
+ assert.equal((await call(viewer,'intake/photo/'+pendingDelete)).status,200,'lead/admin can fetch the same original photo');
+}
+assert.equal((await call(lead,'state?yearId='+mixedYear)).data.intake.find(photo=>photo.id===pendingDelete).read_only,true,'shared unassigned photo is view-only for lead');
+assert.ok(!(await call(rec24,'state?yearId='+mixedYear)).data.intake.some(photo=>photo.id===pendingDelete),'other cohort cannot see unassigned photo');
+assert.equal((await call(rec24,'intake/photo/'+pendingDelete)).status,403);
 assert.equal((await call(rec24,'intake',{id:pendingDelete},'DELETE')).status,403,'another grade recorder cannot delete an unassigned upload');
 assert.equal((await call(lead,'intake',{id:pendingDelete},'DELETE')).status,403,'unassigned upload cannot be attributed to a different staff account');
 assert.equal((await call(rec25,'intake/photo/'+pendingDelete)).status,200,'rejected deletion preserves photo');
@@ -152,6 +160,16 @@ assert.equal((await call(rec25,'intake',{id:groupPhoto.data.id},'DELETE')).statu
 assert.equal((await call(rec25,'event/'+mixedEvent)).data.scores.length,3,'protected photo deletion must not change scores');
 // Page two may arrive first; another batch of the same group/date shares one activity and rating.
 assert.equal((await call(rec25,'event/'+mixedEvent)).data.event.rating,'good','grade recorder may recognize photo rating');
+for(const viewer of [rec25,lead,admin]){
+ const synced=(await call(viewer,'state?yearId='+mixedYear)).data;
+ const activity=synced.events.find(event=>event.id===mixedEvent);
+ assert.equal(activity.rating,'good');assert.equal(activity.number,1);assert.equal(activity.recorded,3);assert.equal(activity.photos,1);
+ assert.ok(synced.intake.some(photo=>photo.id===groupPhoto.data.id));
+ assert.ok(synced.intakeLinks.some(link=>link.intake_id===groupPhoto.data.id&&link.event_id===mixedEvent));
+ const detail=(await call(viewer,'event/'+mixedEvent)).data;
+ assert.equal(detail.photos.length,1);assert.equal(detail.scores.length,3);
+}
+
 async function mixedPage(label,date,lines,ratingText){
  const form=new FormData();form.set('yearId',mixedYear);form.set('date',date);form.set('batchId',crypto.randomUUID());form.set('file',new Blob([groupPng,Buffer.from(label+nonce)],{type:'image/png'}),label+'.png');
  const photo=await call(rec25,'intake',form);assert.equal(photo.status,200);
@@ -264,6 +282,10 @@ assert.deepEqual((await call(lead,'export?yearId='+year)).data.map(row=>row.sid)
 // Recognition must match only the recorder's assigned college and cohort.
 const intakeForm=new FormData();intakeForm.set('batchId',crypto.randomUUID());intakeForm.set('date','2026-10-03');intakeForm.set('yearId',year);intakeForm.set('file',new Blob([png,Buffer.from(nonce+'intake')],{type:'image/png'}),'mixed-cohorts.png');
 const uploaded=await call(rec24,'intake',intakeForm);assert.equal(uploaded.status,200);
+for(const viewer of [lead,admin]){
+ assert.ok((await call(viewer,'state?yearId='+year)).data.intake.some(photo=>photo.id===uploaded.data.id),'24-grade upload syncs too');
+ assert.equal((await call(viewer,'intake/photo/'+uploaded.data.id)).status,200);
+}
 assert.ok((await call(rec24,'state?yearId='+year)).data.todos.some(todo=>todo.target.type==='photo'&&todo.target.id===uploaded.data.id));
 assert.ok(!(await call(rec25,'state?yearId='+year)).data.todos.some(todo=>todo.target.type==='photo'&&todo.target.id===uploaded.data.id),'another grade cannot discover an unassigned photo via todos');
 const recognized=await call(rec24,'intake/process',{id:uploaded.data.id,recognizedLines:[sid24+' 甲一 88',sid25+' 甲二 99',sidB+' 乙一 95']});assert.equal(recognized.status,200);assert.equal(recognized.data.matched,1);
@@ -340,6 +362,8 @@ assert.equal((await call(managed,'me')).status,401);
 assert.equal((await call(managed,'auth/login',{username:managed.username,password:testPassword})).status,401);
 managedLogin=await call(managed,'auth/login',{username:managed.username,password:newPassword});assert.equal(managedLogin.status,200);managed.cookie=managedLogin.cookie;
 assert.equal((await call(managed,'me')).data.cohort,'2025');
+assert.equal((await call(lead,'intake/photo/'+actorPhoto.data.id)).status,200,'uploader reassignment does not move historical pending photo out of its upload college');
+assert.ok((await call(lead,'state?yearId='+year)).data.intake.some(photo=>photo.id===actorPhoto.data.id),'historical photo remains in original college view after reassignment');
 assert.ok(!(await call(lead,'members')).data.some(row=>row.username===managed.username),'reassignment removes staff from former college directory');
 assert.equal((await call(admin,'members',{username:managed.username},'DELETE')).status,200);
 assert.equal((await call(admin,'members',{...memberInput,oldUsername:managed.username,username:managed.username,password:''},'PUT')).status,400,'reactivation requires a new password');

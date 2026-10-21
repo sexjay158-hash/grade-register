@@ -19,6 +19,8 @@ export const FEATURES = {
  todoDashboard: true,
  // Return to the flat activity history without changing stored activities.
  groupActivityArchives: true,
+ // Disable sharing unassigned staff uploads with their college lead.
+ collegePhotoSharing: true,
  sixCharacterPasswords: true,
  mobileLanPreview: true,
  mobileUsability: true,

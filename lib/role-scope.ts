@@ -2,6 +2,7 @@ import {requireAccessibleYear,requireIntakeSemester} from './semester-access';
 import {FEATURES} from './flags';
 import {access,db,type Access} from './server';
 import {requireActiveCollege} from './colleges';
+import {intakeUploadCollege} from './intake-upload-scope';
 export {normalizeCohort} from './cohort';
 
 export const cohortJoin=(alias='s')=>`LEFT JOIN student_numbers sn ON sn.owner=${alias}.owner AND sn.year_id=${alias}.year_id AND sn.sid=${alias}.sid LEFT JOIN student_cohorts sc ON sc.owner=${alias}.owner AND sc.year_id=${alias}.year_id AND sc.sid=${alias}.sid LEFT JOIN group_cohorts gc ON gc.owner=${alias}.owner AND gc.group_id=${alias}.group_id`;
@@ -33,7 +34,7 @@ export async function assertEventScope(a:Access,eventId:string,write=false){
  const row=await db().prepare('SELECT group_id FROM events WHERE id=? AND owner=?').bind(eventId,a.owner).first<{group_id:string}>();
  if(!row)throw new Error('找不到该活动');return assertGroupScope(a,row.group_id,write);
 }
-export async function assertPhotoScope(req:Request,kind:'intake'|'photo',id:string){
+export async function assertPhotoScope(req:Request,kind:'intake'|'photo',id:string,readOnly=false){
  const a=await access(req);
  const table=kind==='intake'?'intake':'photos';
  const row=await db().prepare(`SELECT ${kind==='intake'?'group_id':'event_id'} AS scope FROM ${table} WHERE id=? AND owner=?`).bind(id,a.owner).first<{scope:string|null}>();
@@ -53,7 +54,7 @@ export async function assertPhotoScope(req:Request,kind:'intake'|'photo',id:stri
   const linked=await db().prepare('SELECT DISTINCT g.college FROM intake_event_links l JOIN events e ON e.id=l.event_id JOIN roster_groups g ON g.id=e.group_id WHERE l.intake_id=? AND l.owner=?').bind(id,a.owner).all<{college:string}>();
   if(linked.results.length){if(linked.results.some(g=>g.college!==a.college))throw new Error('无权限：照片包含其他学院信息');}
   else if(row.scope){if(kind==='photo')await assertEventScope(a,row.scope);else await assertGroupScope(a,row.scope);}
-  else {const actor=await db().prepare("SELECT account_id FROM photo_actors WHERE id=? AND owner=? AND kind='intake'").bind(id,a.owner).first<{account_id:string}>();if(actor?.account_id!==a.userId)throw new Error('无权限：照片尚未归入学院');}
+  else {const actor=await db().prepare("SELECT account_id FROM photo_actors WHERE id=? AND owner=? AND kind='intake'").bind(id,a.owner).first<{account_id:string}>();if(actor?.account_id!==a.userId&&!(kind==='intake'&&readOnly&&FEATURES.collegePhotoSharing&&!!a.college&&await intakeUploadCollege(a.owner,id)===a.college))throw new Error('无权限：照片尚未归入学院');}
  }
  return a;
 }
