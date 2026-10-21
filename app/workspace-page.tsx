@@ -10,7 +10,7 @@ const pages = {
  roster: {title:'学生名单',description:'按学期保存名单，在这里导入、查找和维护学生信息。',icon:Users},
  archives:{title:'学期归档',description:'保留历史名单、成绩、活动和照片，仅管理员可查。',icon:CalendarDays},
  colleges: {title:'学院管理',description:'维护全校学院档案，查看各学院的名单与活动数量。',icon:Building2},
- history: {title:'活动记录',description:'查找活动、继续草稿，或查看与修改已登记的成绩。',icon:CalendarDays},
+ history: {title:FEATURES.groupActivityArchives?'小组活动档案':'活动记录',description:FEATURES.groupActivityArchives?'按小组集中查看本学期的全部活动，清楚找到第几次活动及对应成绩和照片。':'查找活动、继续草稿，或查看与修改已登记的成绩。',icon:CalendarDays},
  settings: {title:'照片识别设置',description:'选择识别方式并测试效果，设置将保存在当前浏览器。',icon:Settings2},
  members: {title:'账号与权限',description:'为老师开通账号，分配学院和入学年级，管理登录权限。',icon:ShieldCheck},
 } as const;

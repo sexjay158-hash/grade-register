@@ -17,6 +17,8 @@ export const FEATURES = {
  independentPages: true,
  // Restore the previous landing page without changing stored school data.
  todoDashboard: true,
+ // Return to the flat activity history without changing stored activities.
+ groupActivityArchives: true,
  sixCharacterPasswords: true,
  mobileLanPreview: true,
  mobileUsability: true,

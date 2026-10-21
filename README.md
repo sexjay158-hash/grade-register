@@ -193,3 +193,7 @@ The portable build runs Vinext directly without a host `timeout` command. The ma
 结束时运行 `npm.cmd run preview:stop`，或在启动连接的终端按 Ctrl+C。只关闭本次启动的进程；原先已运行的本机网站和识别服务保留。停止时删除本次运行状态文件，下载工具保留为下次启动的运行依赖，不产生临时测试库或照片。临时网址对应独立浏览器登录状态，电脑 localhost 上的登录不会自动带到手机。
 
 修改前 Git 标签：`pre-temporary-internet-preview-20261011`。独立实现位于 `scripts/temporary-internet-preview.mjs` 和 `scripts/temporary-preview-proxy.mjs`；关闭 `lib/temporary-preview-config.mjs` 的 `TEMPORARY_INTERNET_PREVIEW` 可禁用启动入口，同时运行 `preview:stop` 关闭已有连接。该开关也映射到 `lib/flags.ts` 的 `temporaryInternetPreview`。代理只接到本机 5173，严格检查本次随机网址及写请求 Origin，不放开 Vite 的所有域名，不绕过账号或学院/年级权限。
+
+## 小组活动档案
+
+打开“小组活动”，按组查看当前学期的每次活动、日期、评级和照片，点击进入原成绩表。详见 [使用与回退说明](docs/group-activities.md)。
