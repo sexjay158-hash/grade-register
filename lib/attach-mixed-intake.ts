@@ -4,20 +4,20 @@ import {groupMatchedLines,type Score} from '@/lib/domain';
 import {yearForIntake} from '@/lib/yearly-rosters';
 import {ensureColleges} from '@/lib/colleges';
 import {FEATURES} from '@/lib/flags';
-import {cohortJoin,cohortExpr,scopeCohortExpr} from '@/lib/role-scope';
+import {cohortJoin,scopeCohortExpr} from '@/lib/role-scope';
 
 export async function attachMixedIntake(user:string,id:string,a?:Access){
- const d=db(),photo=await d.prepare('SELECT * FROM intake WHERE id=? AND owner=?').bind(id,user).first<any>();
+ const d=db(),photo=await d.prepare('SELECT status,matched,unresolved,date,batch_id,lines FROM intake WHERE id=? AND owner=?').bind(id,user).first<{status:string;matched:number;unresolved:number;date:string;batch_id:string|null;lines:string|null}>();
  if(!photo)throw new Error('照片不存在');
  if(photo.status==='assigned')return {matched:photo.matched,unresolved:photo.unresolved,groupCount:(await d.prepare('SELECT COUNT(*) AS n FROM intake_event_links WHERE intake_id=? AND owner=?').bind(id,user).first<{n:number}>())?.n??0};
  const lines=JSON.parse(photo.lines||'[]') as string[];
  const yearId=await yearForIntake(user,id);
  await ensureColleges(user);
  const students=await d.prepare(`SELECT s.sid,COALESCE(sn.number,s.sid) AS student_number,s.name,s.group_id,s.college,${scopeCohortExpr()} AS cohort FROM roster_students s ${cohortJoin()} JOIN colleges c ON c.owner=s.owner AND c.name=s.college AND c.active=1 WHERE s.owner=? AND s.year_id=? AND s.active=1`).bind(user,yearId).all<{sid:string;name:string;group_id:string;college:string;cohort:string}>();
- const allowed=a&&a.role!=='admin'?students.results.filter(s=>s.college===a.college&&(a.role!=='recorder'||s.cohort===a.cohort)):students.results;
+ const allowed=a&&a.role!=='admin'?students.results.filter(s=>s.college===a.college&&(a.groupId?s.group_id===a.groupId:a.role!=='recorder'||s.cohort===a.cohort)):students.results;
  const parsed=groupMatchedLines(lines,allowed);
  if(!parsed.groups.size){
-  const reason='未能从同一行确认学生和成绩，请核对原图或拍清楚后重试';
+  const reason=parsed.invalidScores.length?'识别成绩必须在 0～100 范围内，超范围或格式异常的行未录入，请核对原图':'未能从同一行确认学生和成绩，请核对原图或拍清楚后重试';
   await d.prepare("UPDATE intake SET status='needs_review',unresolved=?,error=? WHERE id=? AND owner=? AND status<>'assigned'").bind(parsed.unresolved.length,reason,id,user).run();
   return {blocked:true,reason,matched:0,unresolved:parsed.unresolved.length,groupCount:0};
  }
@@ -56,8 +56,8 @@ export async function attachMixedIntake(user:string,id:string,a?:Access){
   queries.push(d.prepare('INSERT INTO audit(id,owner,event_id,action,payload,created) VALUES(?,?,?,?,?,?)').bind(crypto.randomUUID(),user,plan.eventId,'recognize',JSON.stringify({actorEmail:a?.email,photoId:id,rows:plan.writeable}),t));
  }
  const primary=plans.length===1?plans[0]:null;
- queries.push(d.prepare("UPDATE intake SET status='assigned',group_id=?,event_id=?,matched=?,unresolved=?,error=? WHERE id=? AND owner=? AND status<>'assigned'").bind(primary?.groupId??null,primary?.eventId??null,matched,unresolved,unresolved?`${unresolved} 行未能安全录入，请对照原图核对`:'',id,user));
+ queries.push(d.prepare("UPDATE intake SET status='assigned',group_id=?,event_id=?,matched=?,unresolved=?,error=? WHERE id=? AND owner=? AND status<>'assigned'").bind(primary?.groupId??null,primary?.eventId??null,matched,unresolved,[unresolved?`${unresolved} 行未能安全录入，请对照原图核对`:'',parsed.invalidScores.length?`${parsed.invalidScores.length} 行成绩超出 0～100 范围或数字格式异常，未录入`:'' ].filter(Boolean).join('；'),id,user));
  const result=await guardedBatch(d,queries,checks,'照片或活动已变化，请刷新后重新识别；本次未写入成绩');
  if(!result.at(-1)?.meta.changes)throw new Error('照片已被处理，请刷新页面');
- return {matched,unresolved,groupCount:plans.length,eventIds:plans.map(p=>p.eventId)};
+ return {matched,unresolved,groupCount:plans.length,eventIds:plans.map(p=>p.eventId),scoreWarning:parsed.invalidScores.length?'识别成绩必须在 0～100 范围内，异常行未录入，请核对原图':''};
 }

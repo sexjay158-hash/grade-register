@@ -11,7 +11,7 @@ function countBy<T>(rows:T[],key:(row:T)=>string){
 export function projectWorkspace(a:WorkspaceAccess,rows:WorkspaceRows,groupCohortScope:boolean){
  const {groups:allGroups,students:allStudents,events:allEvents,intake:allIntake,grades:allGrades,links,actors}=rows;
  const groupNames=new Map(allGroups.map(row=>[row.id,row.name]));
- const students=teamLast(a.role==='admin'?allStudents:allStudents.filter(row=>row.college===a.college&&(a.role!=='recorder'||row.management_cohort===a.cohort)),row=>groupNames.get(row.group_id)??'');
+ const students=teamLast(a.role==='admin'?allStudents:allStudents.filter(row=>row.college===a.college&&(a.groupId?row.group_id===a.groupId:a.role!=='recorder'||row.management_cohort===a.cohort)),row=>groupNames.get(row.group_id)??'');
  const sidSet=new Set(students.map(row=>row.sid));
  const members=countBy(students,row=>row.group_id);
  const groups=allGroups.filter(row=>a.role==='admin'||a.role==='college_lead'&&row.college===a.college||a.role==='recorder'&&members.has(row.id)).map(row=>({...row,members:members.get(row.id)??0}));

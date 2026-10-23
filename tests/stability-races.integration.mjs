@@ -45,6 +45,24 @@ try{
  assert.equal(caps.filter(r=>r.status===400&&r.body.error.includes('30')).length,6);
  assert.equal((await must('event/'+event)).photos.length,30);
  report.checks.push('同一活动同时上传 36 张照片：30 张保存、6 张拒绝，活动照片数恰为 30。');
+ assert.equal((await must('event/'+event)).event.version,30,'each accepted upload increments the activity version');
+ const hashGroup='照片去重测试组';await must('roster',{yearId:year,rows:[{sid:'20268880001',name:'去重学生',college,group:hashGroup}]});
+ const hashGroupId=(await must('state?yearId='+year)).groups.find(g=>g.name===hashGroup).id;
+ const hashEvent=(await must('events',{groupId:hashGroupId,date:'2026-10-20'})).id;
+ function samePhotoForms(){const direct=photoForm(year,hashEvent),intake=photoForm(year);intake.set('file',direct.get('file'));return [direct,intake];}
+ for(const firstPath of ['photos','intake']){
+  const [direct,intake]=samePhotoForms(),other=firstPath==='photos'?'intake':'photos';
+  await must(firstPath,firstPath==='photos'?direct:intake);
+  assert.equal((await call(admin,other,other==='photos'?direct:intake)).status,400,'sequential duplicates are blocked in either direction');
+ }
+ const [direct,intake]=samePhotoForms();
+ const hashRace=await Promise.all([call(admin,'photos',direct),call(admin,'intake',intake)]);
+ assert.deepEqual(hashRace.map(r=>r.status).sort(),[200,400],JSON.stringify(hashRace));
+ assert.equal((await call(admin,'event/'+hashEvent,{version:0},'DELETE')).status,400);
+ const hashDetail=await must('event/'+hashEvent);
+ await must('event/'+hashEvent,{version:hashDetail.event.version},'DELETE');
+ for(const photo of hashDetail.photos)assert.notEqual((await call(admin,'photo/'+photo.id)).status,200);
+ report.checks.push('两种上传入口双向去重及同时上传同图：只保存一份；上传递增活动版本，旧版本删除被拒绝，最新版本可删除。');
  assert.equal((await call(admin,'events',{groupId:group,date:'2026-02-31'})).status,400);
  const badDate=photoForm(year);badDate.set('date','2026-02-31');assert.equal((await call(admin,'intake',badDate)).status,400);
  report.checks.push('不存在的日期 2026-02-31 在活动和照片入口均被拒绝。');

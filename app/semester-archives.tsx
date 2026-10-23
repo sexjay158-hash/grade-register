@@ -1,14 +1,15 @@
 "use client";
 import {requestJson} from '@/lib/browser-request';
-import {useEffect,useState} from 'react';
+import {useEffect,useRef,useState} from 'react';
 import {Button} from '@/components/ui/button';
 import {toast} from 'sonner';
 
 export type Semester={id:string;label:string;created:string;archived_at?:string;students?:number;events?:number};
 export function SemesterArchives({current,active,onChanged,onOpen}:{current?:Semester;active:Semester[];onChanged:()=>Promise<void>;onOpen:(year:Semester,tab:string)=>Promise<void>}){
  const [archives,setArchives]=useState<Semester[]>([]),[busy,setBusy]=useState(false),[error,setError]=useState('');
- async function load(){try{const data=await requestJson<Semester[]>('/api/years?archived=1');setArchives(data);setError('');}catch(e){setError((e as Error).message);}}
- useEffect(()=>{void load();},[]);
+ const requestVersion=useRef(0);
+ async function load(){const version=++requestVersion.current;try{const data=await requestJson<Semester[]>('/api/years?archived=1');if(version===requestVersion.current){setArchives(data);setError('');}}catch(e){if(version===requestVersion.current)setError((e as Error).message);}}
+ useEffect(()=>{const controller=new AbortController(),version=++requestVersion.current;void requestJson<Semester[]>('/api/years?archived=1',{signal:controller.signal}).then(data=>{if(!controller.signal.aborted&&version===requestVersion.current){setArchives(data);setError('');}}).catch(e=>{if(!controller.signal.aborted&&version===requestVersion.current)setError((e as Error).message);});return ()=>controller.abort();},[]);
  async function change(id:string,action:string){if(busy)return;if(!window.confirm(action==='archive'?'归档此学期？名单、成绩、活动和照片会保留，仅管理员可查看；归档后只读。':'恢复此学期？院和年级负责人将重新看到该学期，并按原权限操作。'))return;setBusy(true);try{await requestJson('/api/years',{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({id,action})});await load();await onChanged();toast.success(action==='archive'?'学期已归档，历史数据保留':'学期已恢复');}catch(e){toast.error((e as Error).message);}finally{setBusy(false);}}
  return <section className="panel"><div className="table-toolbar"><div><h2>学期归档</h2><p className="muted text-sm">仅管理员可查看和导出归档学期。归档保留名单、成绩、活动和照片，不删除数据。</p></div><Button variant="outline" disabled={busy} onClick={()=>load()}>重新加载</Button></div>
  {current&&!current.archived_at&&<div className="notice"><p>当前学期：{current.label}</p><Button disabled={busy||active.length<2} onClick={()=>change(current.id,'archive')}>归档当前学期</Button>{active.length<2&&<p>请先在学生名单中创建新学期。</p>}</div>}

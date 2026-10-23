@@ -2,10 +2,20 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {buildWorkspaceTodos} from '../lib/workspace/todos.ts';
 import {projectWorkspace} from '../lib/workspace/projection.ts';
+import {filterDismissedTodos} from '../lib/workspace/todo-dismissals.ts';
 
 const group={id:'g25',name:'同名组',college:'甲院'};
 const event={id:'e25',group_id:'g25',status:'draft',recorded:2,number:1,date:'2026-10-21',rating:'good'};
 function source(){return {colleges:[{name:'甲院',active:1}],groups:[{...group}],events:[{...event}],intake:[],intakeLinks:[]};}
+test('dismissals hide only the exact reminder revision and edits bring it back',()=>{
+ const rows=source(),todos=buildWorkspaceTodos(rows,'recorder');
+ const hidden=[{todo_id:todos[0].id,revision:todos[0].revision}];
+ assert.equal(filterDismissedTodos(todos,hidden).length,0);
+ assert.equal(filterDismissedTodos(todos,[]).length,1,'other accounts with no dismissal retain their reminders');
+ rows.events[0].version=1;
+ assert.equal(filterDismissedTodos(buildWorkspaceTodos(rows,'recorder'),hidden).length,1,'even a score edit with unchanged counts creates a new reminder revision');
+ assert.deepEqual(buildWorkspaceTodos(source(),'recorder'),todos,'unchanged data keeps a stable revision');
+});
 test('one activity has one actionable task; zero-percent rating is already selected',()=>{
  const rows=source();rows.events=[{...event,recorded:0},{...event,id:'missing',rating:null},{...event,id:'zero',rating:'none'},{...event,id:'done',status:'committed'}];
  const before=structuredClone(rows),todos=buildWorkspaceTodos(rows,'recorder');

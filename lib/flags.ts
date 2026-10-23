@@ -17,6 +17,8 @@ export const FEATURES = {
  independentPages: true,
  // Restore the previous landing page without changing stored school data.
  todoDashboard: true,
+ // Hide only the current account's reminders; activity data remains intact.
+ todoDismissal: true,
  // Return to the flat activity history without changing stored activities.
  groupActivityArchives: true,
  // Hide college summary cards while retaining individual group archives.
@@ -67,8 +69,15 @@ export const FEATURES = {
  continuousPhotoUpload: true,
  photoUploadReview: true,
  unrecognizedPhotoDeletion: true,
+ // Remove only draft photos; retain their scores, ratings and audit history.
+ recognizedPhotoDeletion: true,
  directScoreEntry: true,
  draftDeletion: true,
  activityDeletion: true,
- rememberOcrCredentials: true
+ activityListDeletion: true,
+ // Recorders may delete only drafts in their authorized groups.
+ recorderDraftDeletion: true,
+ rememberOcrCredentials: true,
+ bulkGroupAccounts: true,
+ groupRegistration: true
 };

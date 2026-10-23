@@ -23,7 +23,7 @@ function runWithWorker(args,env){
  return new Promise((resolve,reject)=>{
   const child=spawn(process.execPath,args,{cwd:root,env,stdio:['ignore','pipe','pipe'],windowsHide:true});
   let output='',errors='';
-  child.stdout.on('data',chunk=>{output+=chunk.toString();});
+  child.stdout.on('data',chunk=>{output+=chunk.toString();if(process.argv.includes('--group-accounts')||process.argv.includes('--group-accounts-ui'))process.stdout.write(chunk);});
   child.stderr.on('data',chunk=>{errors+=chunk.toString();});
   child.once('error',reject);
   child.once('exit',code=>code===0?resolve(output.trim()):reject(new Error(`${args.join(' ')} failed\n${(errors||output).slice(-4000)}`)));
@@ -71,8 +71,10 @@ try{
  worker=spawn(process.execPath,[...wrangler,'dev','--config','dist/server/wrangler.json','--local','--persist-to',stateDir,'--ip','127.0.0.1','--port',String(port),'--inspector-port','0','--var',`ADMIN_SETUP_TOKEN:${token}`],{cwd:root,stdio:['ignore','pipe','pipe'],windowsHide:true});
  for(const stream of [worker.stdout,worker.stderr])stream.on('data',chunk=>{workerOutput=(workerOutput+chunk.toString()).slice(-10000);});
  await waitForWorker(`http://127.0.0.1:${port}/login`);
+ if(process.argv.includes('--group-accounts')||process.argv.includes('--group-accounts-ui'))console.log(`Isolated UI preview: http://127.0.0.1:${port}/login`);
  console.log('Checking account setup, three roles, rosters, grades, photos and exports…');
- console.log(await runWithWorker([process.argv.includes('--races')?'tests/stability-races.integration.mjs':'tests/roles.integration.mjs'],{...process.env,TEST_BASE_URL:base,TEST_BOOTSTRAP_TOKEN:token,STABILITY_REPORT_DIR:process.env.STABILITY_REPORT_DIR??path.resolve(root,'..','reports',`verification-${new Date().toISOString().slice(0,10)}`)}));
+ const output=await runWithWorker([process.argv.includes('--group-accounts-ui')?'tests/group-accounts-ui.fixture.mjs':process.argv.includes('--group-accounts')?'tests/group-accounts.integration.mjs':process.argv.includes('--races')?'tests/stability-races.integration.mjs':'tests/roles.integration.mjs'],{...process.env,TEST_BASE_URL:base,TEST_STATE_DIR:stateDir,TEST_BOOTSTRAP_TOKEN:token,GROUP_ACCOUNT_REPORT_DIR:process.env.GROUP_ACCOUNT_REPORT_DIR??path.resolve(root,'..','reports','group-accounts-20261023'),STABILITY_REPORT_DIR:process.env.STABILITY_REPORT_DIR??path.resolve(root,'..','reports',`verification-${new Date().toISOString().slice(0,10)}`)});
+ if(!process.argv.includes('--group-accounts')&&!process.argv.includes('--group-accounts-ui'))console.log(output);
 }catch(error){
  console.error(workerOutput.slice(-4000).replaceAll(token,'[test token]'));
  throw error;

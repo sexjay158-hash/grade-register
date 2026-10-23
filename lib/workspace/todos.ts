@@ -4,12 +4,12 @@ export type TodoRole='admin'|'college_lead'|'recorder';
 export type WorkspaceTodo={
  id:string;kind:'photo'|'complete'|'confirm';reason:'photo_pending'|'photo_review'|'photo_conflict'|'scores_missing'|'rating_missing'|'awaiting_confirmation';
  title:string;detail:string;date:string;colleges:string[];groupNames:string[];
- target:{type:'photo'|'event';id:string};
+ target:{type:'photo'|'event';id:string};revision?:string;
 };
 type TodoSource={
  colleges:{name:string;active:number}[];
  groups:{id:string;name:string;college:string}[];
- events:{id:string;group_id:string;status?:string;recorded:number;number?:number;date?:string;rating?:string|null}[];
+ events:{id:string;group_id:string;status?:string;recorded:number;number?:number;date?:string;rating?:string|null;version?:number}[];
  intake:{id:string;name?:string;date?:string;status:string;group_id:string|null;event_id:string|null;unresolved?:number;error?:string;upload_college?:string|null;read_only?:boolean}[];
  intakeLinks:{intake_id:string;event_id:string;group_id:string}[];
 };
@@ -23,7 +23,7 @@ export function buildWorkspaceTodos(source:TodoSource,role:TodoRole,archived=fal
  const events=new Map(source.events.filter(row=>groups.has(row.group_id)).map(row=>[row.id,row]));
  const links=new Map<string,TodoSource['intakeLinks']>();
  for(const link of source.intakeLinks){const related=links.get(link.intake_id)??[];related.push(link);links.set(link.intake_id,related);}
- const todos:WorkspaceTodo[]=[];
+ const todos:WorkspaceTodo[]=[],photosById=new Map(source.intake.map(photo=>[photo.id,photo]));
  for(const photo of source.intake){
   const related=links.get(photo.id)??[];
   const groupIds=new Set([...related.map(link=>link.group_id),...(photo.group_id?[photo.group_id]:[])]);
@@ -56,5 +56,11 @@ export function buildWorkspaceTodos(source:TodoSource,role:TodoRole,archived=fal
   });
  }
  const priority=(todo:WorkspaceTodo)=>todo.reason==='photo_conflict'?0:todo.kind==='photo'?1:todo.kind==='complete'?2:3;
+ for(const todo of todos){
+  const photo=todo.target.type==='photo'?photosById.get(todo.target.id):undefined;
+  const ids=new Set(todo.target.type==='event'?[todo.target.id]:[...(links.get(todo.target.id)??[]).map(link=>link.event_id),...(photo?.event_id?[photo.event_id]:[])]);
+  const related=[...ids].sort().map(id=>{const event=events.get(id);return [id,event?.version??0,event?.status,event?.rating,event?.recorded];});
+  todo.revision=JSON.stringify([todo,role,photo?.status,photo?.unresolved,related]);
+ }
  return todos.sort((a,b)=>priority(a)-priority(b)||a.date.localeCompare(b.date)||a.id.localeCompare(b.id));
 }

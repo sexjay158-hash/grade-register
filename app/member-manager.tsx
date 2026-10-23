@@ -1,6 +1,6 @@
 "use client";
 import {requestJson} from '@/lib/browser-request';
-import {useEffect,useState} from 'react';
+import {useEffect,useState,useSyncExternalStore} from 'react';
 import {Users,UserX,KeyRound,RefreshCw,Trash2,Search} from 'lucide-react';
 import {Button} from '@/components/ui/button';
 import {Input} from '@/components/ui/input';
@@ -14,6 +14,7 @@ import {MemberManager as LegacyMemberManager} from './member-manager-legacy';
 
 type Member={username:string;role:'college_lead'|'recorder';college:string;cohort:string|null;active:number};
 const alphabet='ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%';
+const noLocationUpdates=()=>()=>{};
 function generatedPassword(){const values=crypto.getRandomValues(new Uint8Array(20));return Array.from(values,n=>alphabet[n%alphabet.length]).join('');}
 async function request<T=unknown>(path:string,method='GET',body?:unknown):Promise<T>{return requestJson<T>(path,{method,headers:{'Content-Type':'application/json'},body:body?JSON.stringify(body):undefined});}
 
@@ -23,10 +24,11 @@ export function MemberManager({colleges,adminUsername=''}:{colleges:string[];adm
 }
 function LocalMemberManager({colleges,adminUsername}:{colleges:string[];adminUsername:string}){
  const [members,setMembers]=useState<Member[]>([]),[username,setUsername]=useState(''),[password,setPassword]=useState(''),[role,setRole]=useState<'college_lead'|'recorder'>('recorder'),[college,setCollege]=useState(''),[cohort,setCohort]=useState(''),[editing,setEditing]=useState(false),[originalUsername,setOriginalUsername]=useState(''),[query,setQuery]=useState(''),[reactivating,setReactivating]=useState(false),[busy,setBusy]=useState(false),[showPassword,setShowPassword]=useState(false),[current,setCurrent]=useState(''),[next,setNext]=useState(''),[issued,setIssued]=useState<{username:string;password:string}|null>(null);
- const [siteUrl,setSiteUrl]=useState(''),[localPreview,setLocalPreview]=useState(false);
+ const siteUrl=useSyncExternalStore(noLocationUpdates,()=>window.location.origin+'/',()=>'');
+ const hostname=siteUrl?new URL(siteUrl).hostname:'';
+ const localPreview=!!hostname&&(['localhost','127.0.0.1','::1','[::1]'].includes(hostname)||/^(10\.|192\.168\.|172\.(1[6-9]|2[0-9]|3[01])\.)/.test(hostname));
  async function load(){setMembers(await request<Member[]>('/api/members'));}
  useEffect(()=>{request<Member[]>('/api/members').then(setMembers).catch(e=>toast.error((e as Error).message));},[]);
- useEffect(()=>{setSiteUrl(window.location.origin+'/');setLocalPreview(['localhost','127.0.0.1','::1','[::1]'].includes(window.location.hostname)||/^(10\.|192\.168\.|172\.(1[6-9]|2[0-9]|3[01])\.)/.test(window.location.hostname));},[]);
  function reset(){setUsername('');setPassword('');setCollege('');setCohort('');setRole('recorder');setEditing(false);setOriginalUsername('');setReactivating(false);}
  async function save(){if(busy)return;setBusy(true);try{const assignedCohort=role==='recorder'?normalizeCohort(cohort):null;const saved=await request<Member>('/api/members',editing&&FEATURES.memberAccountManagement?'PUT':'POST',{username,password,role,college,cohort:assignedCohort,...(editing?{oldUsername:originalUsername}:{createOnly:true})});await load();setIssued(password?{username:saved.username,password}:null);reset();toast.success(editing?'账号权限已更新，原登录会话已失效':localPreview?'本地验收账号已创建':'账号已创建，可以把账号和密码交给老师');}catch(e){toast.error((e as Error).message);}finally{setBusy(false);}}
  async function disable(value:string){if(busy||!window.confirm(`停用 ${value}？该老师会立即失去系统访问权限。`))return;setBusy(true);try{await request('/api/members','DELETE',{username:value});await load();if(originalUsername===value)reset();setIssued(previous=>previous?.username===value?null:previous);toast.success('账号已停用，现有登录会话已失效');}catch(e){toast.error((e as Error).message);}finally{setBusy(false);}}

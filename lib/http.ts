@@ -10,6 +10,27 @@ export function json(data:unknown,status=200,headers:HeadersInit={}){
  return Response.json(data,{status,headers:result});
 }
 
+export async function readBoundedBytes(req:Request,maxBytes:number):Promise<ArrayBuffer>{
+ const declared=req.headers.get('content-length');
+ if(declared&&/^\d+$/.test(declared)&&Number(declared)>maxBytes)throw new HttpError(413,'BODY_TOO_LARGE','请求内容过大，请压缩照片后重试');
+ const reader=req.body?.getReader();if(!reader)return new ArrayBuffer(0);
+ const chunks:ArrayBuffer[]=[];let size=0;
+ try{
+  while(true){const {done,value}=await reader.read();if(done)break;size+=value.byteLength;
+   if(size>maxBytes){await reader.cancel();throw new HttpError(413,'BODY_TOO_LARGE','请求内容过大，请压缩照片后重试');}
+   chunks.push(new Uint8Array(value).buffer);
+  }
+  return await new Blob(chunks).arrayBuffer();
+ }finally{reader.releaseLock();}
+}
+
+export async function readPhotoForm(req:Request){
+ // Bound the entire multipart body before parsing, including additional fields/files.
+ const bytes=await readBoundedBytes(req,8*1024*1024+64*1024);
+ try{return await new Response(bytes,{headers:{'Content-Type':req.headers.get('content-type')??''}}).formData();}
+ catch{throw new HttpError(400,'INVALID_FORM','照片上传格式不正确，请重新选择照片');}
+}
+
 export async function readJsonBody(req:Request,maxBytes=2_000_000):Promise<Record<string,any>>{
  const declared=req.headers.get('content-length');
  if(declared&&/^\d+$/.test(declared)&&Number(declared)>maxBytes)throw new HttpError(413,'BODY_TOO_LARGE','请求内容过大');

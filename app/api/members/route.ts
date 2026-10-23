@@ -1,7 +1,7 @@
 import {updateAccountAndRevoke} from '@/lib/session-store';
 import {access,db,json,failure,readBody,requireAdmin,now} from '@/lib/server';
 import {FEATURES} from '@/lib/flags';
-import {findAccount,normalizeUsername,passwordRecord,revokeAccountSessions,validatePassword} from '@/lib/local-auth';
+import {findAccount,normalizeUsername,passwordRecord,validatePassword} from '@/lib/local-auth';
 import {normalizeCohort} from '@/lib/role-scope';
 import {requireExistingActiveCollege} from '@/lib/colleges';
 import * as legacy from './legacy';
@@ -13,7 +13,7 @@ export async function GET(req:Request){
   if(FEATURES.collegeStaffDirectory&&a.role==='college_lead'&&a.college){
    const rows=await db().prepare("SELECT username,role,college,cohort,active FROM local_accounts WHERE role='recorder' AND college=? ORDER BY cohort,username").bind(a.college).all();return json(rows.results);
   }
-  requireAdmin(a);const rows=await db().prepare("SELECT username,role,college,cohort,active,created,updated FROM local_accounts WHERE role<>'admin' ORDER BY college,role,username").all();return json(rows.results);
+  requireAdmin(a);const rows=await db().prepare("SELECT username,role,college,cohort,active,created,updated FROM local_accounts WHERE role IN ('college_lead','recorder') ORDER BY college,role,username").all();return json(rows.results);
  }catch(e){return failure(e);}
 }
 export async function POST(req:Request){
@@ -23,6 +23,7 @@ export async function POST(req:Request){
   if(!['college_lead','recorder'].includes(role))throw new Error('请选择院负责人或年级录入员');
   if(!college)throw new Error('请选择负责的学院');await requireExistingActiveCollege(a.owner,college);
   const cohort=role==='recorder'?normalizeCohort(input.cohort):null,existing=await findAccount(username),t=now();
+  if(existing?.role==='group_recorder')throw new Error('请在小组批量开户中办理重置或交接');
   if(existing?.role==='admin')throw new Error('不能在这里修改管理员账号');
   if(input.createOnly&&existing)throw new Error('账号已存在，请选择修改或使用其他账号名称');
   const password=String(input.password??'');
@@ -42,7 +43,7 @@ export async function PUT(req:Request){
   const a=await access(req),input=await readBody(req);requireAdmin(a);
   if(!FEATURES.localAccounts||!FEATURES.memberAccountManagement)throw new Error('账号修改功能未开启');
   const oldUsername=normalizeUsername(input.oldUsername),username=normalizeUsername(input.username),account=await findAccount(oldUsername);
-  if(!account||account.role==='admin')throw new Error('不能修改该账号');
+  if(!account||account.role==='admin'||account.role==='group_recorder')throw new Error('不能修改该账号');
   const duplicate=await findAccount(username);if(duplicate&&duplicate.id!==account.id)throw new Error('账号名称已被使用');
   const role=String(input.role??''),college=String(input.college??'').trim();
   if(!['college_lead','recorder'].includes(role))throw new Error('请选择院负责人或年级负责人');
@@ -59,7 +60,7 @@ export async function DELETE(req:Request){
  if(!FEATURES.localAccounts)return legacy.DELETE(req);
  try{
   const a=await access(req),input=await readBody(req);requireAdmin(a);const username=normalizeUsername(input.username),account=await findAccount(username);
-  if(!account||account.role==='admin')throw new Error('不能停用或删除该账号');
+  if(!account||account.role==='admin'||account.role==='group_recorder')throw new Error('不能停用或删除该账号');
   if(input.action==='delete'){
    if(!FEATURES.memberAccountManagement)throw new Error('账号删除功能未开启');
    if(String(input.confirmUsername??'')!==account.username)throw new Error('请输入完整账号名称确认删除');

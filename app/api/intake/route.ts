@@ -1,14 +1,16 @@
 import {cleanupRejectedPhoto} from '@/lib/photo-write-cleanup';
+import {newPhotoHashGuard} from '@/lib/photo-upload-guard';
+import {readPhotoForm} from '@/lib/http';
+import {deleteRecognizedPhoto} from '@/lib/delete-recognized-photo';
 import {guardedBatch,writableYearGuard,accountWriteGuard} from '@/lib/guarded-batch';
 import {isActivityDate} from '@/lib/activity-date';
 import {requireAccessibleYear,requireIntakeSemester} from '@/lib/semester-access';
 import {db,bucket,access,requireEditor,json,failure,now,readBody} from '@/lib/server';
 import {assertPhotoScope} from '@/lib/role-scope';
 import {FEATURES} from '@/lib/flags';
-import {requireYear} from '@/lib/yearly-rosters';
 import {ensureIntakeUploadScopes} from '@/lib/intake-upload-scope';
 export async function POST(req:Request){try{
- const a=await access(req);requireEditor(a);const u=a.owner,form=await req.formData(),yearId=await requireAccessibleYear(a,form.get('yearId'),true),f=form.get('file'),batchId=String(form.get('batchId')??''),date=String(form.get('date')??'');
+ const a=await access(req);requireEditor(a);const u=a.owner,form=await readPhotoForm(req),yearId=await requireAccessibleYear(a,form.get('yearId'),true),f=form.get('file'),batchId=String(form.get('batchId')??''),date=String(form.get('date')??'');
  if(!/^[0-9a-f-]{36}$/i.test(batchId)||!isActivityDate(date))throw new Error('上传批次或活动日期无效');
  if(!(f instanceof File)||!['image/jpeg','image/png','image/webp'].includes(f.type)||!f.size||f.size>8*1024*1024)throw new Error('照片须为 JPG、PNG 或 WebP，每张不超过 8 MB');
  await ensureIntakeUploadScopes();
@@ -30,18 +32,23 @@ export async function POST(req:Request){try{
    d.prepare('INSERT INTO roster_intakes(intake_id,owner,year_id) SELECT ?,?,? WHERE EXISTS(SELECT 1 FROM intake WHERE id=? AND owner=?)').bind(id,u,yearId,id,u),
    d.prepare('INSERT INTO photo_actors(kind,id,owner,account_id) SELECT ?,?,?,? WHERE EXISTS(SELECT 1 FROM intake WHERE id=? AND owner=?)').bind('intake',id,u,a.userId,id,u),
    ...(shareCollege?[d.prepare('INSERT INTO intake_upload_scopes(owner,intake_id,college_id) SELECT ?,?,c.id FROM colleges c WHERE c.owner=? AND c.name=? AND c.active=1 AND EXISTS(SELECT 1 FROM intake WHERE id=? AND owner=?)').bind(u,id,u,a.college,id,u)]:[])
-  ],[writableYearGuard(u,yearId),accountWriteGuard(a),...(shareCollege?[{sql:'EXISTS(SELECT 1 FROM colleges WHERE owner=? AND name=? AND active=1)',values:[u,a.college]}]:[])],'学期、学院或账号权限已变化，请刷新后重新上传');
+  ],[writableYearGuard(u,yearId),accountWriteGuard(a),newPhotoHashGuard(u,hash),...(shareCollege?[{sql:'EXISTS(SELECT 1 FROM colleges WHERE owner=? AND name=? AND active=1)',values:[u,a.college]}]:[])],'照片已上传，或学期、学院、账号权限已变化，请刷新核对后重新上传');
   if(!result[0].meta.changes){rejected=true;throw new Error('同一批次最多上传 30 张照片');}
  }catch(e){if(!await cleanupRejectedPhoto(e,()=>bucket().delete(`${u}/${id}`),rejected))console.error('Photo retained after uncertain write or cleanup failure',id);throw e;}
  return json({id,status:'pending'});
 }catch(e){return failure(e);}}
 
 export async function DELETE(req:Request){try{
- const a=await access(req);requireEditor(a);const {id}=await readBody(req);
- if(!FEATURES.unrecognizedPhotoDeletion)throw new Error('未识别照片删除已关闭');
+ const a=await access(req);requireEditor(a);const {id,recognized}=await readBody(req);
+ if(recognized===true?!FEATURES.recognizedPhotoDeletion:!FEATURES.unrecognizedPhotoDeletion)throw new Error('照片删除已关闭');
  if(typeof id!=='string'||!id||id.length>100)throw new Error('照片编号无效');
  await assertPhotoScope(req,'intake',id);const yearId=await requireIntakeSemester(a,id,true);
  await ensureIntakeUploadScopes();
+ if(recognized===true){
+  await deleteRecognizedPhoto(a,id,yearId);
+  let photoCleanupFailed=false;try{await bucket().delete(`${a.owner}/${id}`);}catch{photoCleanupFailed=true;console.error('recognized photo storage cleanup failed',id);}
+  return json({deleted:true,id,scoresPreserved:true,photoCleanupFailed});
+ }
  const d=db(),result=await guardedBatch(d,[
   // Check again in the delete itself: recognition may finish after the user opens the confirmation.
   d.prepare("DELETE FROM intake WHERE id=? AND owner=? AND status IN ('pending','needs_review') AND matched=0 AND group_id IS NULL AND event_id IS NULL AND NOT EXISTS(SELECT 1 FROM intake_event_links l WHERE l.intake_id=intake.id AND l.owner=intake.owner) AND NOT EXISTS(SELECT 1 FROM photos p WHERE p.id=intake.id AND p.owner=intake.owner)").bind(id,a.owner),

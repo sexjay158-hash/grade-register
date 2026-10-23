@@ -10,6 +10,6 @@ export function NativeLoginForm({reason=''}:{reason?:string}){
    <label>密码<input name="password" type="password" autoComplete="current-password" placeholder="输入密码" required maxLength={128}/></label>
    {error&&<p className="auth-error" role="alert">{error}</p>}
    <button type="submit">登录系统</button>
-  </form><p className="auth-help">忘记账号或密码，请联系学校管理员重置。</p>
+  </form><p className="auth-help"><a href="/activate">首次使用小组账号？输入激活码设置密码</a></p><p className="auth-help">忘记账号或密码，请联系学校管理员重置。</p>
  </section></main>;
 }

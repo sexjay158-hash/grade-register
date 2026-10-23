@@ -1,6 +1,6 @@
 "use client";
 import {requestJson} from '@/lib/browser-request';
-import {useCallback,useEffect,useState} from 'react';
+import {useEffect,useRef,useState} from 'react';
 import {RefreshCw,Users} from 'lucide-react';
 import {Button} from '@/components/ui/button';
 import {Input} from '@/components/ui/input';
@@ -8,11 +8,15 @@ import {Table,TableBody,TableCell,TableHead,TableHeader,TableRow} from '@/compon
 
 type Recorder={username:string;college:string;cohort:string|null;active:number};
 export function CollegeRecorders({college}:{college:string}){
- const [members,setMembers]=useState<Recorder[]>([]),[query,setQuery]=useState(''),[loading,setLoading]=useState(true),[error,setError]=useState('');
- const load=useCallback(async()=>{setLoading(true);setError('');try{
-  const data=await requestJson<Recorder[]>('/api/members');setMembers(data);
- }catch(e){setMembers([]);setError((e as Error).message);}finally{setLoading(false);}},[]);
- useEffect(()=>{void load();},[college,load]);
+ const [result,setResult]=useState<{college:string;members:Recorder[];error:string}|null>(null),[query,setQuery]=useState(''),[refreshing,setRefreshing]=useState(false);
+ const requestVersion=useRef(0);
+ useEffect(()=>{
+  const controller=new AbortController(),version=++requestVersion.current;
+  void requestJson<Recorder[]>('/api/members',{signal:controller.signal}).then(members=>{if(!controller.signal.aborted&&version===requestVersion.current){setResult({college,members,error:''});setRefreshing(false);}}).catch(error=>{if(!controller.signal.aborted&&version===requestVersion.current){setResult({college,members:[],error:(error as Error).message});setRefreshing(false);}});
+  return ()=>controller.abort();
+ },[college]);
+ async function load(){const version=++requestVersion.current;setRefreshing(true);try{const members=await requestJson<Recorder[]>('/api/members');if(version===requestVersion.current)setResult({college,members,error:''});}catch(error){if(version===requestVersion.current)setResult({college,members:[],error:(error as Error).message});}finally{if(version===requestVersion.current)setRefreshing(false);}}
+ const members=result?.college===college?result.members:[],error=result?.college===college?result.error:'',loading=refreshing||result?.college!==college;
  const filtered=members.filter(item=>[item.username,item.cohort??'',item.active?'可登录':'已停用'].some(value=>value.toLowerCase().includes(query.trim().toLowerCase())));
  return <section className="panel member-manager"><div className="section-head"><span className="large-icon small"><Users/></span><div><h2>{college} · 年级负责人</h2><p>查看本院各年级的负责人；账号和密码由管理员维护。</p></div></div>
   <div className="table-toolbar"><Input aria-label="查询本院年级负责人" placeholder="搜索账号、年级或状态" value={query} onChange={e=>setQuery(e.target.value)}/><Button variant="outline" disabled={loading} onClick={()=>void load()}><RefreshCw size={15}/>刷新</Button></div>

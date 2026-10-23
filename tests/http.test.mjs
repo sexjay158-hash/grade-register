@@ -1,8 +1,18 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {readJsonBody,HttpError,failure} from '../lib/http.ts';
+import {readJsonBody,readBoundedBytes,readPhotoForm,HttpError,failure} from '../lib/http.ts';
 
 const request=body=>new Request('https://example.test/api/students',{method:'POST',body});
+test('photo requests reject oversized streamed bodies before multipart parsing',async()=>{
+ let cancelled=false;
+ const body=new ReadableStream({pull(c){c.enqueue(new Uint8Array(1024));},cancel(){cancelled=true;}});
+ await assert.rejects(readBoundedBytes(new Request('https://example.test',{method:'POST',body,duplex:'half'}),1500),e=>e.status===413);
+ assert.equal(cancelled,true);
+ const form=new FormData();form.set('file',new Blob(['photo'],{type:'image/png'}),'photo.png');form.set('eventId','test');
+ const parsed=await readPhotoForm(request(form));assert.equal(parsed.get('eventId'),'test');assert.equal(await parsed.get('file').text(),'photo');
+ await assert.rejects(readPhotoForm(request('invalid multipart')),e=>e.status===400);
+ await assert.rejects(readPhotoForm(new Request(request(form),{headers:{'Content-Length':String(9*1024*1024)}})),e=>e.status===413);
+});
 test('JSON boundary accepts objects and refuses malformed/non-object JSON',async()=>{
  assert.deepEqual(await readJsonBody(request('{"name":"学生"}')),{name:'学生'});
  for(const value of ['[]','null','1','"text"','{',''])await assert.rejects(readJsonBody(request(value)),error=>error.status===400&&error.code==='INVALID_JSON');

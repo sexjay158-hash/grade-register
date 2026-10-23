@@ -1,0 +1,8 @@
+'use client';
+import {useState} from 'react';
+import {activateWithWaiting} from '@/lib/browser-request';
+import {PASSWORD_MIN_LENGTH} from '@/lib/password-policy';
+export function GroupAccountActivation(){
+ const [username,setUsername]=useState(''),[code,setCode]=useState(''),[password,setPassword]=useState(''),[confirm,setConfirm]=useState(''),[busy,setBusy]=useState(false),[error,setError]=useState(''),[waiting,setWaiting]=useState(false);
+ return <main className="auth-shell"><section className="auth-card"><img src="/arts-university-logo.png" alt="校徽"/><h1>激活小组账号</h1><p>输入院负责人单独发给你的学号和激活码，自行设置密码。激活码 7 天有效，只能使用一次。</p><form className="auth-form native-login-form" onSubmit={async e=>{e.preventDefault();if(busy)return;if(password!==confirm){setError('两次密码不一致');return;}setBusy(true);setWaiting(false);setError('');try{await activateWithWaiting({username,code,password},()=>setWaiting(true));window.location.assign('/');}catch(e){setError((e as Error).message);}finally{setBusy(false);}}}><label>登录学号<input required inputMode="numeric" autoComplete="username" value={username} onChange={e=>setUsername(e.target.value)}/></label><label>一次性激活码<input required maxLength={48} autoComplete="off" value={code} onChange={e=>setCode(e.target.value)}/></label><label>新密码（至少 {PASSWORD_MIN_LENGTH} 位）<input required type="password" autoComplete="new-password" minLength={PASSWORD_MIN_LENGTH} value={password} onChange={e=>setPassword(e.target.value)}/></label><label>再次输入密码<input required type="password" autoComplete="new-password" value={confirm} onChange={e=>setConfirm(e.target.value)}/></label>{error&&<p role="alert">{error}</p>}<button disabled={busy}>{busy?waiting?'激活人数较多，正在等待…':'正在激活…':'激活并登录'}</button></form><p><a href="/login">已有密码？直接登录</a></p></section></main>;
+}

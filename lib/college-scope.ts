@@ -9,7 +9,7 @@ export function collegeNames(students:Student[]):string[]{
 export function studentsInCollege(students:Student[],college:string):Student[]{
  return college===ALL_COLLEGES?students:students.filter(student=>student.college===college);
 }
-export function scopeWorkbook(students:Student[],groups:{id:string;name:string}[],records:{sid:string;[key:string]:unknown}[],college:string){
+export function scopeWorkbook<T extends {sid:string;number?:number}>(students:Student[],groups:{id:string;name:string}[],records:T[],college:string){
  const selected=studentsInCollege(students,college);
  const names=new Map(groups.map(group=>[group.id,group.name]));
  const ordered=teamLast(!FEATURES.preserveExcelOrder&&college===ALL_COLLEGES?[...selected].sort((a,b)=>a.college.localeCompare(b.college,'zh-CN')||a.position-b.position):selected,student=>names.get(student.group_id)??'');

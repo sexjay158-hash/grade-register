@@ -11,7 +11,7 @@ export async function GET(req:Request){try{
  ${a.role==='admin'||!FEATURES.concurrentQueries?`,(SELECT COUNT(*) FROM roster_students s WHERE s.owner=y.owner AND s.year_id=y.id AND s.active=1) AS students,
  (SELECT COUNT(*) FROM events e JOIN roster_groups g ON g.id=e.group_id WHERE e.owner=y.owner AND g.year_id=y.id) AS events`:''}
  FROM roster_years y LEFT JOIN semester_archives ar ON ar.owner=y.owner AND ar.year_id=y.id WHERE y.owner=? ${FEATURES.semesterArchives?(archived?'AND ar.year_id IS NOT NULL':'AND ar.year_id IS NULL'):''} ORDER BY y.created DESC`).bind(a.owner).all();
- return json(rows.results.map(row=>a.role==='admin'?row:{id:row.id,label:row.label,created:row.created,updated:row.updated}));
+ return json(rows.results.filter(row=>!a.groupYearId||row.id===a.groupYearId).map(row=>a.role==='admin'?row:{id:row.id,label:row.label,created:row.created,updated:row.updated}));
 }catch(e){return failure(e);}}
 export async function POST(req:Request){try{
  const a=await access(req);requireAdmin(a);await ensureYearlyRoster(a.owner);const d=db(),input=await readBody(req),label=cleanRosterText(input.label,'学期名称',80),id=crypto.randomUUID(),t=now();

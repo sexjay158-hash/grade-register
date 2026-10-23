@@ -11,7 +11,7 @@ export function bucket(){if(!env.BUCKET)throw new HttpError(503,'SERVICE_UNAVAIL
 export {SCHOOL_OWNER} from './school-identity';
 import {SCHOOL_OWNER} from './school-identity';
 import {accountFromRequest} from './local-auth';
-export type Access={owner:string;userId:string;email:string;role:'admin'|'college_lead'|'recorder';college:string|null;cohort:string|null};
+export type Access={owner:string;userId:string;email:string;role:'admin'|'college_lead'|'recorder';college:string|null;cohort:string|null;groupId?:string;groupYearId?:string;displayName?:string};
 const requests=new WeakMap<Request,Promise<Access>>();
 export async function access(req:Request):Promise<Access>{
  const pending=requests.get(req);if(pending)return pending;
@@ -21,6 +21,12 @@ async function resolveAccess(req:Request):Promise<Access>{
  if(req.method!=='GET'){const origin=req.headers.get('origin');if(origin&&origin!==new URL(req.url).origin)throw new Error('请求来源不正确');}
  if(FEATURES.localAccounts){
   const account=await accountFromRequest(req);if(!account)throw new Error('请先登录后再操作');
+  if(account.role==='group_recorder'){
+   if(!FEATURES.bulkGroupAccounts)throw new Error('无权限：小组账号暂未启用');
+   const {groupAssignment}=await import('./group-account-store');const assigned=await groupAssignment(account.id);
+   if(!assigned)throw new Error('无权限：账号已交接，请联系院负责人');
+   return {owner:SCHOOL_OWNER,userId:account.id,email:account.username,role:'recorder',college:account.college,cohort:account.cohort,...assigned};
+  }
   return {owner:SCHOOL_OWNER,userId:account.id,email:account.username,role:account.role,college:account.college,cohort:account.cohort};
  }
  const id=req.headers.get('oai-authenticated-user-id');if(!id)throw new Error('请先登录后再操作');
@@ -39,4 +45,5 @@ export async function owner(req:Request){return (await access(req)).owner;}
 export function requireAdmin(a:Access){if(a.role!=='admin')throw new Error('无权限：仅管理员可以操作');}
 export function requireEditor(a:Access){if(!['admin','college_lead','recorder'].includes(a.role))throw new Error('无权限：不能编辑成绩');}
 export const now=()=>new Date().toISOString();
-export async function getEvent(id:string,user:string){const e=await db().prepare('SELECT * FROM events WHERE id=? AND owner=?').bind(id,user).first<any>();if(!e)throw new Error('找不到该活动');return e;}
+type EventRecord={id:string;owner:string;group_id:string;number:number;date:string;status:string;version:number;batch_id:string|null;rating?:string|null};
+export async function getEvent(id:string,user:string){const e=await db().prepare('SELECT * FROM events WHERE id=? AND owner=?').bind(id,user).first<EventRecord>();if(!e)throw new Error('找不到该活动');return e;}

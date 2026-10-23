@@ -8,6 +8,33 @@ import * as XLSX from 'xlsx';
 import {detectGroup} from '../lib/group-detection.ts';
 import {validatedOcrLines} from '../lib/ocr-lines.ts';
 import {collegeNames,scopeWorkbook} from '../lib/college-scope.ts';
+
+test('OCR preserves score digits matching short IDs and refuses ambiguous score columns',()=>{
+ const members=[{sid:'01',name:'张甲'}];
+ for(const line of ['01 张甲 101','01 张甲 1001']){
+  const result=matchLines([line],members);
+  assert.equal(result.matched.length,0,line);assert.deepEqual(result.invalidScores,[line]);
+ }
+ for(const line of ['01 张甲 50 80','张甲 20 90','01 张甲 1 缺席'])assert.equal(matchLines([line],members).matched.length,0,line);
+ for(const line of ['1 01 张甲 90','2. 张甲 90','01 张甲 90'])assert.equal(matchLines([line],members).matched[0].score,90,line);
+ assert.equal(matchLines(['3 张甲 缺席'],members).matched[0].state,'absent');
+});
+
+test('scores accept 0 and 100 inclusively; reject out of range, nonnumeric and nonfinite values',()=>{
+ for(const score of [0,0.5,99.99,100])assert.equal(validateScores([{sid:'s',state:'scored',score}],['s'])[0].score,score);
+ for(const score of [-1,-0.01,100.01,101,10000,NaN,Infinity,-Infinity,'50',null])assert.throws(()=>validateScores([{sid:'s',state:'scored',score}],['s']),/0～100/);
+});
+test('OCR refuses signed out-of-range scores without stripping minus signs or clipping values',()=>{
+ const members=[{sid:'001',name:'张甲'},{sid:'002',name:'李乙'}];
+ for(const value of ['-1','−2','－3','101','100.01','1000','1e3','1,000']){
+  const result=matchLines([`001 张甲 ${value}`,'002 李乙 100'],members);
+  assert.deepEqual(result.matched.map(row=>[row.sid,row.score]),[['002',100]],value);
+  assert.equal(result.unresolved.length,1,value);assert.equal(result.invalidScores.length,1,value);
+ }
+ assert.equal(matchLines(['1 001 张甲 0'],members).matched[0].score,0);
+ const corrected=matchLines(['001 张甲 101','001 张甲 90'],members);
+ assert.equal(corrected.matched[0].score,90,'an invalid row must not prevent a later valid row for the same student');
+});
 test('college and school exports select the right students and scores, including same-named groups',()=>{
  const students=[{sid:'002',name:'乙',college:'医学院',group_id:'g2',position:1},{sid:'001',name:'甲',college:'机械工程学院',group_id:'g1',position:0}];
  const groups=[{id:'g1',name:'第一组'},{id:'g2',name:'第一组'}];

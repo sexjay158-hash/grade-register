@@ -2,8 +2,8 @@ import {guardedBatch,writableYearGuard,writableGroupGuard,accountWriteGuard} fro
 import {cohortForGroup} from '@/lib/group-cohorts';
 import {requireAccessibleYear} from '@/lib/semester-access';
 import {db,access,json,failure,readBody} from '@/lib/server';
-import {assertRosterEditor,cohortExpr,scopeCohortExpr,cohortJoin} from '@/lib/role-scope';
-import {requireYear,cleanRosterText} from '@/lib/yearly-rosters';
+import {assertRosterEditor,scopeCohortExpr,cohortJoin} from '@/lib/role-scope';
+import {cleanRosterText} from '@/lib/yearly-rosters';
 import {requireActiveCollege} from '@/lib/colleges';
 import {rosterCohort} from '@/lib/student-number';
 import {FEATURES} from '@/lib/flags';

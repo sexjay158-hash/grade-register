@@ -1,16 +1,17 @@
 import {guardedBatch,writableGroupGuard,accountWriteGuard} from '@/lib/guarded-batch';
+import {canDeleteActivity} from '@/lib/activity-deletion';
 import {db,bucket,access,requireEditor,json,failure,getEvent,now} from '@/lib/server';
 import {readBody} from '@/lib/server';
 import {validateScores} from '@/lib/domain';
 import {FEATURES} from '@/lib/flags';
 import {requireActivityRating} from '@/lib/activity-rating';
 import {ensureActivityRatings} from '@/lib/activity-rating-store';
-import {assertEventScope,assertStudentScope,assertPhotoScope,cohortExpr,scopeCohortExpr,cohortJoin} from '@/lib/role-scope';
+import {assertEventScope,assertStudentScope,assertPhotoScope,scopeCohortExpr,cohortJoin} from '@/lib/role-scope';
 export async function GET(req:Request,{params}:{params:Promise<{id:string}>}){try{
  const {id}=await params,a=await access(req),u=a.owner;const group=await assertEventScope(a,id);const event=await getEvent(id,u),d=db();
  if(FEATURES.activityRating){await ensureActivityRatings();const rating=await d.prepare('SELECT rating FROM event_ratings WHERE event_id=? AND owner=?').bind(id,u).first<{rating:string}>();event.rating=rating?.rating??null;}
  const [s,p,linked,auditRows]=await d.batch([d.prepare('SELECT * FROM scores WHERE event_id=?').bind(id),d.prepare('SELECT id,name,mime,size,created FROM photos WHERE event_id=?').bind(id),d.prepare('SELECT i.id,i.name,i.mime,i.size,i.created FROM intake_event_links l JOIN intake i ON i.id=l.intake_id WHERE l.event_id=? AND l.owner=?').bind(id,u),d.prepare("SELECT action,created,json_extract(payload,'$.actorEmail') AS actorEmail FROM audit WHERE event_id=? AND owner=? ORDER BY created DESC LIMIT 20").bind(id,u)]);
- const allowed=a.role==='recorder'?(await d.prepare(`SELECT s.sid FROM roster_students s ${cohortJoin()} WHERE s.owner=? AND s.year_id=? AND s.group_id=? AND s.active=1 AND ${scopeCohortExpr()}=?`).bind(u,group.year_id,event.group_id,a.cohort).all<{sid:string}>()).results.map(row=>row.sid):null;
+ const allowed=a.role==='recorder'&&!a.groupId?(await d.prepare(`SELECT s.sid FROM roster_students s ${cohortJoin()} WHERE s.owner=? AND s.year_id=? AND s.group_id=? AND s.active=1 AND ${scopeCohortExpr()}=?`).bind(u,group.year_id,event.group_id,a.cohort).all<{sid:string}>()).results.map(row=>row.sid):null;
  const actorPhotos=a.role==='recorder'&&!FEATURES.groupCohortScope?(await d.prepare('SELECT id FROM photo_actors WHERE owner=? AND account_id=?').bind(u,a.userId).all<{id:string}>()).results.map(row=>row.id):null;
  const photoRows=[];for(const photo of [...p.results,...linked.results]){try{await assertPhotoScope(req,p.results.some(row=>(row as {id:string}).id===(photo as {id:string}).id)?'photo':'intake',String((photo as {id:string}).id));photoRows.push(photo);}catch(err){if(a.role==='admin')throw err;}}
  return json({event,scores:allowed?s.results.filter(row=>allowed.includes(String((row as {sid:string}).sid))):s.results,photos:actorPhotos?photoRows.filter(row=>actorPhotos.includes(String((row as {id:string}).id))):photoRows,audit:a.role==='recorder'?[]:auditRows.results});
@@ -73,7 +74,8 @@ export async function PATCH(req:Request,{params}:{params:Promise<{id:string}>}){
 }catch(e){return failure(e);}}
 
 export async function DELETE(req:Request,{params}:{params:Promise<{id:string}>}){try{
- const a=await access(req);requireEditor(a);const body=await readBody(req);if(a.role==='recorder')throw new Error('无权限：年级负责人不能删除活动');const {id}=await params,u=a.owner;await assertEventScope(a,id,true);const event=await getEvent(id,u),d=db();
+ const a=await access(req);requireEditor(a);const body=await readBody(req);const {id}=await params,u=a.owner;await assertEventScope(a,id,true);const event=await getEvent(id,u),d=db();
+ if(!canDeleteActivity(a.role,event.status,false,FEATURES.recorderDraftDeletion))throw new Error('无权限：年级负责人只能删除负责范围内的未确认草稿');
  if(event.status==='draft'&&!FEATURES.draftDeletion)throw new Error('删除草稿功能已关闭');
  if(event.status==='committed'&&!FEATURES.activityDeletion)throw new Error('删除已登记活动功能已关闭');
  if(!['draft','committed'].includes(event.status))throw new Error('该活动状态不能删除');

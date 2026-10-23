@@ -1,5 +1,6 @@
 import {rosterCohort,studentNumber} from './student-number';
 import {FEATURES} from './flags';
+import {isValidScore,SCORE_RANGE_MESSAGE} from './score-range';
 export type Student={sid:string;student_number?:string;name:string;college:string;group_id:string;position:number;cohort?:string;management_cohort?:string|null};
 export type Score={sid:string;score:number|null;state:string;note?:string};
 export function validateScores(rows:unknown,members:string[]):Score[]{
@@ -9,7 +10,7 @@ export function validateScores(rows:unknown,members:string[]):Score[]{
   if(!r||typeof r.sid!=='string'||!valid.has(r.sid)||seen.has(r.sid))throw new Error('存在重复学号或非本组学生');
   seen.add(r.sid);
   if(!['scored','absent','excused','unrecorded'].includes(r.state))throw new Error('成绩状态不正确');
-  if(r.state==='scored'&&(typeof r.score!=='number'||!Number.isFinite(r.score)||r.score<0||r.score>10000))throw new Error('成绩须为 0～10000 的数字');
+  if(r.state==='scored'&&!isValidScore(r.score))throw new Error(SCORE_RANGE_MESSAGE);
   return {sid:r.sid,state:r.state,score:r.state==='scored'?r.score:null,note:String(r.note??'').slice(0,300)};
  });
 }
@@ -25,26 +26,35 @@ export function validateRoster(rows:unknown,maxRows=10000){
  });
 }
 export function matchLines(lines:string[],members:{sid:string;student_number?:string;name:string}[]){
- const matched:Score[]=[],unresolved:string[]=[],seen=new Set<string>();
+ const matched:Score[]=[],unresolved:string[]=[],invalidScores:string[]=[],seen=new Set<string>();
  for(const line of lines){
   const compact=line.replace(/\s+/g,''),byId=members.filter(m=>new RegExp('(^|\\D)'+studentNumber(m).replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+'(?!\\d)').test(line));
   const found=byId.length>1?byId.filter(m=>m.name.length>=2&&compact.includes(m.name)):byId.length?byId:members.filter(m=>m.name.length>=2&&compact.includes(m.name));
   if(found.length!==1){unresolved.push(line);continue;}
   const m=found[0];
   if(byId.length&&members.some(other=>other.sid!==m.sid&&other.name!==m.name&&!m.name.includes(other.name)&&other.name.length>=2&&compact.includes(other.name))){unresolved.push(line);continue;}
-  const rest=line.replaceAll(studentNumber(m),' ').replaceAll(m.name,' '),absent=/缺席|缺勤/.test(rest),excused=/请假/.test(rest);
-  let nums=[...rest.matchAll(/\d+(?:\.\d+)?/g)].map(x=>Number(x[0]));
-  const leadingIndex=(nums.length>1||absent||excused)&&Number.isInteger(nums[0])&&nums[0]>=1&&nums[0]<=60;
-  if(leadingIndex)nums=nums.slice(1);
+  const idPattern=new RegExp('(^|\\D)('+studentNumber(m).replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+')(?!\\d)'),idMatch=idPattern.exec(line);
+  const idStart=idMatch?idMatch.index+idMatch[1].length:-1,nameStart=line.indexOf(m.name);
+  const identityStart=Math.min(...[idStart,nameStart].filter(index=>index>=0));
+  // A row number must occur before the student's identity, never between two scores.
+  const prefix=Number.isFinite(identityStart)?line.slice(0,identityStart):'',rowNumber=/^\s*(\d{1,2})[\s、.)）:：|]+$/.exec(prefix);
+  const hasRowNumber=!!rowNumber&&Number(rowNumber[1])>=1&&Number(rowNumber[1])<=60;
+  // Remove one complete ID token; replaceAll would change score 101 for ID 01.
+  let rest=idMatch?line.slice(0,idStart)+' '+line.slice(idStart+idMatch[2].length):line;
+  if(hasRowNumber)rest=rest.slice(prefix.length);
+  rest=rest.replaceAll(m.name,' ');
+  const absent=/缺席|缺勤/.test(rest),excused=/请假/.test(rest);
+  if(/\d\s*[eE]\s*[+-]?\d|\d[,，]\d/.test(rest)){invalidScores.push(line);unresolved.push(line);continue;}
+  const nums=[...rest.replace(/[−－]/g,'-').matchAll(/[+-]?(?:\d+(?:\.\d+)?|\.\d+)/g)].map(x=>Number(x[0]));
   if(seen.has(m.sid)||(absent&&excused)||((absent||excused)&&nums.length)||(!absent&&!excused&&nums.length!==1)){unresolved.push(line);continue;}
   const score=nums.length?nums[0]:null;
-  if(score!==null&&score>10000){unresolved.push(line);continue;}
+  if(score!==null&&!isValidScore(score)){invalidScores.push(line);unresolved.push(line);continue;}
   seen.add(m.sid);matched.push({sid:m.sid,state:absent?'absent':excused?'excused':'scored',score,note:'识别结果，请对照照片核对'});
  }
- return {matched,unresolved};
+ return {matched,unresolved,invalidScores};
 }
 export function groupMatchedLines(lines:string[],students:{sid:string;name:string;group_id:string}[]){
  const parsed=matchLines(lines,students),bySid=new Map(students.map(s=>[s.sid,s.group_id])),groups=new Map<string,Score[]>();
  for(const score of parsed.matched){const groupId=bySid.get(score.sid)!;if(!groups.has(groupId))groups.set(groupId,[]);groups.get(groupId)!.push(score);}
- return {groups,unresolved:parsed.unresolved};
+ return {groups,unresolved:parsed.unresolved,invalidScores:parsed.invalidScores};
 }

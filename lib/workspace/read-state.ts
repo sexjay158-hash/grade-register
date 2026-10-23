@@ -8,15 +8,16 @@ import type {GroupRow,StudentRow,EventRow,IntakeRow,GradeRow,LinkRow,ActorRow} f
 import {projectWorkspace} from './projection';
 import {buildWorkspaceTodos} from './todos';
 import {ensureIntakeUploadScopes} from '../intake-upload-scope';
+import {ensureTodoDismissals,filterDismissedTodos} from './todo-dismissals';
 
 // Query orchestration stays server-only; projection is independently testable.
-export async function readWorkspaceState(a:Access,yearId:string){
+export async function readWorkspaceState(a:Access,yearId:string,includeDismissed=false){
  const u=a.owner,d=db();
  if(FEATURES.activityRating)await ensureActivityRatings();
  await ensureIntakeUploadScopes();
- const scoped=FEATURES.concurrentQueries&&a.role!=='admin',studentWhere=scoped?` AND s.college=?${a.role==='recorder'?` AND ${scopeCohortExpr()}=?`:''}`:'';
- const studentParams=scoped?[u,yearId,a.college,...(a.role==='recorder'?[a.cohort]:[])]:[u,yearId];
- const eventWhere=scoped?' AND g.college=?':'',eventParams=scoped?[u,yearId,a.college]:[u,yearId];
+ const scoped=FEATURES.concurrentQueries&&a.role!=='admin',studentWhere=scoped?` AND s.college=?${a.groupId?' AND s.group_id=?':a.role==='recorder'?` AND ${scopeCohortExpr()}=?`:''}`:'';
+ const studentParams=scoped?[u,yearId,a.college,...(a.groupId?[a.groupId]:a.role==='recorder'?[a.cohort]:[])]:[u,yearId];
+ const eventWhere=scoped?' AND g.college=?'+(a.groupId?' AND g.id=?':''):'',eventParams=scoped?[u,yearId,a.college,...(a.groupId?[a.groupId]:[])]:[u,yearId];
  const ratingColumn=FEATURES.activityRating?'ar.rating AS rating':'NULL AS rating';
  const ratingJoin=FEATURES.activityRating?' LEFT JOIN event_ratings ar ON ar.event_id=e.id AND ar.owner=e.owner':'';
  const read=createReadBatch(d);
@@ -38,5 +39,11 @@ export async function readWorkspaceState(a:Access,yearId:string){
  ]);
  const semester=await d.prepare('SELECT y.id,y.label,y.created,ar.archived_at FROM roster_years y LEFT JOIN semester_archives ar ON ar.owner=y.owner AND ar.year_id=y.id WHERE y.owner=? AND y.id=?').bind(u,yearId).first();
  const visible=projectWorkspace(a,{colleges:allColleges,groups:g.results,students:s.results,events:e.results,intake:i.results,grades:grades.results,links:links.results,actors:actors.results},FEATURES.groupCohortScope);
- return {yearId,semester,...visible,todos:FEATURES.todoDashboard?buildWorkspaceTodos(visible,a.role,!!semester?.archived_at):[]};
+ let todos=FEATURES.todoDashboard?buildWorkspaceTodos(visible,a.role,!!semester?.archived_at):[];
+ if(FEATURES.todoDismissal&&!includeDismissed){
+  await ensureTodoDismissals(d);
+  const dismissed=await d.prepare('SELECT todo_id,revision FROM todo_dismissals WHERE owner=? AND account_id=? AND year_id=?').bind(u,a.userId,yearId).all<{todo_id:string;revision:string}>();
+  todos=filterDismissedTodos(todos,dismissed.results);
+ }
+ return {yearId,semester,...visible,todos};
 }

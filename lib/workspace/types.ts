@@ -13,4 +13,4 @@ export type WorkspaceRows = {
  colleges:College[]; groups:GroupRow[]; students:StudentRow[]; events:EventRow[];
  intake:IntakeRow[]; grades:GradeRow[]; links:LinkRow[]; actors:ActorRow[];
 };
-export type WorkspaceAccess = Pick<Access,'role'|'college'|'cohort'|'userId'>;
+export type WorkspaceAccess = Pick<Access,'role'|'college'|'cohort'|'userId'|'groupId'>;

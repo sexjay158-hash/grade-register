@@ -72,6 +72,64 @@ for(const [user,role,cohort] of [[lead,'college_lead',null],[rec24,'recorder','2
  const login=await call(user,'auth/login',{username:user.username,password:testPassword});assert.equal(login.status,200);user.cookie=login.cookie;
 }
 const full=(await call(admin,'state?yearId='+year)).data;
+// A leader submits one group; only an authorized review imports it into the official roster.
+const signupYear=(await call(admin,'years',{label:'线上报名-'+nonce})).data.id;
+const campaign=await call(admin,'group-registration',{action:'open',yearId:signupYear});
+assert.equal(campaign.status,200);const signupToken=campaign.data.token;
+assert.equal((await call(outsider,'group-registration/public/'+signupToken)).status,200);
+const joinPage=await fetch(origin+'/join/'+signupToken);assert.equal(joinPage.status,200);assert.match(await joinPage.text(),/小组线上报名/);
+const reviewPage=await fetch(origin+'/registration/manage?yearId='+encodeURIComponent(signupYear),{headers:{Cookie:admin.cookie}});assert.equal(reviewPage.status,200);assert.match(await reviewPage.text(),/小组报名审核/);
+const wrongOrigin=await fetch(base+'group-registration/public/'+signupToken,{method:'POST',headers:{Origin:'https://example.invalid','Content-Type':'application/json'},body:JSON.stringify({})});assert.equal(wrongOrigin.status,403,'cross-site public submission is blocked');
+const signupSid='202499991001';
+const signup={group:'线上报名测试组',members:[{sid:signupSid,name:'报名组长'},{sid:'202499991002',name:'报名组员'}]};
+assert.equal((await call(outsider,'group-registration/public/'+signupToken,signup)).status,401,'anonymous signup cannot submit a roster');
+const leaderA={cookie:''};
+const registration=await call(outsider,'group-registration/leader/'+signupToken,{action:'register',sid:signupSid,name:'报名组长',college:collegeA,password:testPassword});
+assert.equal(registration.status,200);leaderA.cookie=registration.cookie;
+assert.ok(leaderA.cookie,'registration starts a leader session');
+assert.equal((await call(outsider,'group-registration/leader/'+signupToken,{action:'register',sid:signupSid,name:'重复',college:collegeB,password:testPassword})).status,409,'same student id cannot register twice in the semester');
+assert.equal((await call(outsider,'group-registration/leader/'+signupToken,{action:'login',sid:signupSid,password:'wrong-pass'})).status,401);
+assert.equal((await call(outsider,'group-registration/leader/'+signupToken,{action:'login',sid:signupSid,password:testPassword})).status,200);
+const ownCatalog=await call(leaderA,'group-registration/public/'+signupToken);assert.equal(ownCatalog.data.leader.college,collegeA);
+const submitted=await call(leaderA,'group-registration/public/'+signupToken,signup);
+assert.equal(submitted.status,201);
+assert.equal((await call(leaderA,'group-registration/public/'+signupToken,signup)).status,400,'one leader cannot hold two pending applications');
+assert.equal((await call(leaderA,'group-registration/public/'+signupToken,{group:'越权组',members:[{sid:'202599991004',name:'错误年级'},{sid:signupSid,name:'报名组长'}]})).status,400,'members must share the leader cohort');
+const leaderB={cookie:''},foreignSid='202599991003';
+const foreignAccount=await call(outsider,'group-registration/leader/'+signupToken,{action:'register',sid:foreignSid,name:'外院组长',college:collegeB,password:testPassword});
+assert.equal(foreignAccount.status,200);leaderB.cookie=foreignAccount.cookie;
+const foreignSignup={group:'其他学院线上组',members:[{sid:foreignSid,name:'外院组长'}]};
+const foreignSubmitted=await call(leaderB,'group-registration/public/'+signupToken,foreignSignup);
+assert.equal(foreignSubmitted.status,201);
+assert.equal((await call(lead,'group-registration',{action:'approve',yearId:signupYear,id:foreignSubmitted.data.id})).status,403,'college lead cannot approve another college');
+assert.equal((await call(admin,'group-registration',{action:'reject',yearId:signupYear,id:foreignSubmitted.data.id,note:'请核对成员信息'})).status,200);
+assert.equal((await call(leaderB,'group-registration/public/'+signupToken)).data.submission.status,'rejected','leader sees own review outcome');
+assert.equal((await call(leaderB,'group-registration/public/'+signupToken,{...foreignSignup,group:'其他学院更正组'})).status,201,'rejected group can resubmit under a corrected name');
+assert.equal((await call(admin,'state?yearId='+signupYear)).data.students.some(row=>row.sid===signupSid),false,'pending signup never edits roster');
+assert.equal((await call(outsider,'group-registration?yearId='+signupYear)).status,401,'public cannot list student submissions');
+const leadSignups=(await call(lead,'group-registration?yearId='+signupYear)).data;
+assert.equal(leadSignups.campaignOpen,true,'college lead sees whether signup is open');
+assert.equal(leadSignups.submissions.some(row=>row.id===submitted.data.id),true);
+assert.equal(leadSignups.submissions.some(row=>row.college===collegeB),false,'college lead cannot see another college');
+assert.equal(leadSignups.stats[0].college,collegeA);assert.equal(leadSignups.stats[0].cohort,'2024');
+const schoolSignups=(await call(admin,'group-registration?yearId='+signupYear)).data;
+assert.equal(schoolSignups.total,2,'a renamed resubmission counts as one current group');
+assert.equal(schoolSignups.recordsTotal,3,'review history keeps the rejected original');
+const schoolExport=await call(admin,'group-registration/export?yearId='+signupYear);
+assert.equal(schoolExport.data.submissions.length,2,'Excel contains only the latest application per leader');
+assert.equal(schoolExport.data.submissions.some(row=>row.group_name==='其他学院线上组'),false,'Excel excludes an older rejected name');
+const leadExport=await call(lead,'group-registration/export?yearId='+signupYear);assert.equal(leadExport.status,200);
+assert.equal(leadExport.data.submissions.length,1,'college lead exports only own college');
+assert.equal(leadExport.data.submissions[0].members.length,2,'Excel source contains all member details');
+assert.equal((await call(outsider,'group-registration/export?yearId='+signupYear)).status,401);
+assert.equal((await call(lead,'group-registration',{action:'approve',yearId:signupYear,id:submitted.data.id})).status,200);
+assert.equal((await call(admin,'state?yearId='+signupYear)).data.students.some(row=>row.sid===signupSid),true,'approved group appears in official roster');
+assert.equal((await call(leaderA,'group-registration/public/'+signupToken)).data.submission.status,'approved');
+assert.equal((await call(lead,'group-registration',{action:'approve',yearId:signupYear,id:submitted.data.id})).status,400,'approval cannot repeat');
+assert.equal((await call(admin,'group-registration',{action:'close',yearId:signupYear})).status,200);
+assert.equal((await call(leaderA,'group-registration/public/'+signupToken,signup)).status,400,'closed signup link cannot submit');
+assert.equal((await call(leaderA,'group-registration/public/'+signupToken)).data.submission.status,'approved','closed campaign still shows own review outcome');
+assert.equal((await call(outsider,'group-registration/leader/'+signupToken,{action:'register',sid:'202499991099',name:'关闭后注册',college:collegeA,password:testPassword})).status,400);
 for(const user of [lead,rec24,rec25])assert.equal((await call(user,'health?ready=1')).status,403,'staff cannot inspect administrator dependency checks');
 // Cached initialization must not cache responsibility: number edits and removals invalidate it.
 const revisionYear=(await call(admin,'years',{label:'年级重算-'+nonce})).data.id;
@@ -133,6 +191,28 @@ assert.equal((await call(rec25,'students',{yearId:mixedYear,oldSid:minority.sid,
 assert.equal((await call(rec24,'students',{yearId:mixedYear,sid:minority.sid},'DELETE')).status,403);
 const mixedEvent=(await call(rec25,'events',{groupId:mixedGroup.id,date:'2026-10-14'})).data.id;
 assert.equal((await call(rec25,'event/'+mixedEvent,{version:0,sid:minority.sid,score:86},'PATCH')).status,200,'minority scores follow group manager');
+// Dismiss a reminder for this account only; preserve data and resurface on edits.
+const todoStateBefore=(await call(rec25,'state?yearId='+mixedYear)).data;
+const eventTodo=todoStateBefore.todos.find(todo=>todo.target.id===mixedEvent);assert.ok(eventTodo?.revision);
+assert.equal((await call(rec24,'todos',{yearId:mixedYear,id:eventTodo.id,revision:eventTodo.revision},'DELETE')).status,403);
+assert.equal((await call(rec25,'todos',{yearId:mixedYear,id:eventTodo.id,revision:eventTodo.revision+'stale'},'DELETE')).status,400);
+assert.equal((await call(rec25,'todos',{yearId:mixedYear,id:eventTodo.id,revision:eventTodo.revision},'DELETE')).data.reminderOnly,true);
+const todoStateAfter=(await call(rec25,'state?yearId='+mixedYear)).data;
+assert.ok(!todoStateAfter.todos.some(todo=>todo.id===eventTodo.id));
+assert.deepEqual(todoStateAfter.events,todoStateBefore.events);assert.deepEqual(todoStateAfter.grades,todoStateBefore.grades);assert.deepEqual(todoStateAfter.intake,todoStateBefore.intake);
+assert.ok((await call(lead,'state?yearId='+mixedYear)).data.todos.some(todo=>todo.id===eventTodo.id),'other account keeps its reminder');
+const beforeEdit=(await call(rec25,'event/'+mixedEvent)).data;
+for(const invalid of [-1,100.01,101,10000]){
+ const rejected=await call(rec25,'event/'+mixedEvent,{version:beforeEdit.event.version,sid:minority.sid,score:invalid},'PATCH');
+ assert.equal(rejected.status,400);assert.match(JSON.stringify(rejected.data),/0～100/);
+}
+assert.equal((await call(rec25,'event/'+mixedEvent,{action:'save',version:beforeEdit.event.version,rows:[{sid:minority.sid,state:'scored',score:101}]},'PUT')).status,400);
+assert.equal((await call(rec25,'event/'+mixedEvent)).data.event.version,beforeEdit.event.version,'rejected scores do not modify event or scores');
+assert.equal((await call(rec25,'event/'+mixedEvent,{version:beforeEdit.event.version,sid:minority.sid,score:86},'PATCH')).status,200);
+const reappeared=(await call(rec25,'state?yearId='+mixedYear)).data.todos.find(todo=>todo.id===eventTodo.id);assert.ok(reappeared,'editing the activity creates a new reminder revision');
+assert.equal((await call(rec25,'todos',{yearId:mixedYear,id:reappeared.id,revision:reappeared.revision},'DELETE')).status,200);
+assert.equal((await call(rec25,'todos',{yearId:mixedYear})).data.restored,true);
+assert.ok((await call(rec25,'state?yearId='+mixedYear)).data.todos.some(todo=>todo.id===eventTodo.id));
 assert.equal((await call(rec24,'student-grades?yearId='+mixedYear+'&sid='+minority.sid)).status,403);
 assert.equal((await call(rec25,'student-grades?yearId='+mixedYear+'&sid='+minority.sid)).status,200);
 assert.equal((await call(rec25,'group-cohorts',{yearId:mixedYear,groupId:mixedGroup.id,cohort:'24级'},'PATCH')).status,403,'grade manager cannot assign groups');
@@ -141,6 +221,39 @@ async function deletionPhoto(user,yearId,label){
  const form=new FormData();form.set('yearId',yearId);form.set('date','2026-10-14');form.set('batchId',crypto.randomUUID());form.set('file',new Blob([groupPng,Buffer.from(label+nonce)],{type:'image/png'}),label+'.png');
  const response=await call(user,'intake',form);assert.equal(response.status,200,JSON.stringify(response.data));return response.data.id;
 }
+// Recorder deletion removes the draft itself, while retaining shared evidence
+// and confirmed scores belonging to another activity.
+const deletionYear=(await call(admin,'years',{label:'活动删除验收-'+nonce})).data.id;
+const deletionRows=[{sid:'2025'+nonce+'del1',name:'删除甲',college:collegeA,group:'删除验收甲'},{sid:'2025'+nonce+'del2',name:'保留乙',college:collegeA,group:'删除验收乙'}];
+assert.equal((await call(admin,'roster',{yearId:deletionYear,rows:deletionRows})).status,200);
+const sharedDeletionPhoto=await deletionPhoto(rec25,deletionYear,'shared-draft-delete');
+const deletionRecognition=await call(rec25,'intake/process',{id:sharedDeletionPhoto,recognizedLines:[deletionRows[0].sid+' 删除甲 77',deletionRows[1].sid+' 保留乙 88'],recognizedRatingText:'优'});
+assert.equal(deletionRecognition.status,200,JSON.stringify(deletionRecognition.data));assert.equal(deletionRecognition.data.groupCount,2);
+const deletionState=(await call(rec25,'state?yearId='+deletionYear)).data;
+const removedGroup=deletionState.groups.find(g=>g.name==='删除验收甲'),retainedGroup=deletionState.groups.find(g=>g.name==='删除验收乙');
+const removedActivity=deletionState.events.find(e=>e.group_id===removedGroup.id),retainedActivity=deletionState.events.find(e=>e.group_id===retainedGroup.id);
+assert.equal((await call(lead,'event/'+retainedActivity.id,{action:'commit',version:retainedActivity.version,rating:'excellent',rows:[{sid:deletionRows[1].sid,state:'scored',score:88}]},'PUT')).status,200);
+const retainedBefore=(await call(lead,'event/'+retainedActivity.id)).data;
+assert.equal((await call(rec24,'event/'+removedActivity.id,{version:removedActivity.version},'DELETE')).status,403,'another cohort cannot delete this draft');
+const changedDelete=await call(rec25,'event/'+removedActivity.id,{version:removedActivity.version,sid:deletionRows[0].sid,score:78},'PATCH');assert.equal(changedDelete.status,200);
+assert.equal((await call(rec25,'event/'+removedActivity.id,{version:removedActivity.version},'DELETE')).status,400,'stale confirmation cannot delete an edited activity');
+assert.equal((await call(rec25,'event/'+removedActivity.id,{version:changedDelete.data.version},'DELETE')).status,200,'recorder may delete their own draft with scores');
+assert.equal((await call(rec25,'event/'+removedActivity.id)).status,400,'the activity itself is gone');
+const retainedAfter=(await call(lead,'event/'+retainedActivity.id)).data;
+assert.deepEqual(retainedAfter.scores,retainedBefore.scores);assert.deepEqual(retainedAfter.photos,retainedBefore.photos);assert.equal(retainedAfter.event.rating,retainedBefore.event.rating);
+assert.equal((await call(rec25,'intake/photo/'+sharedDeletionPhoto)).status,200,'shared photo stays available to remaining activity');
+assert.ok(!(await call(rec25,'state?yearId='+deletionYear)).data.grades.some(row=>row.event_id===removedActivity.id));
+assert.equal((await call(rec25,'event/'+retainedActivity.id,{version:retainedAfter.event.version},'DELETE')).status,403,'recorder cannot delete confirmed activity');
+assert.equal((await call(admin,'event/'+retainedActivity.id,{version:retainedAfter.event.version},'DELETE')).status,200,'manager deletion of confirmed activity is unchanged');
+const emptyDelete=(await call(rec25,'events',{groupId:removedGroup.id,date:'2026-10-14'})).data.id;
+assert.equal((await call(rec25,'event/'+emptyDelete,{version:0},'DELETE')).status,200,'empty drafts can also be removed');
+const archivedDelete=(await call(rec25,'events',{groupId:removedGroup.id,date:'2026-10-14'})).data.id;
+assert.equal((await call(admin,'years',{id:deletionYear,action:'archive'},'PATCH')).status,200);
+assert.equal((await call(rec25,'event/'+archivedDelete,{version:0},'DELETE')).status,403,'archiving revokes recorder deletion');
+assert.equal((await call(admin,'event/'+archivedDelete,{version:0},'DELETE')).status,400,'administrator must restore the semester before deleting');
+assert.equal((await call(admin,'years',{id:deletionYear,action:'restore'},'PATCH')).status,200);
+assert.equal((await call(rec25,'event/'+archivedDelete,{version:0},'DELETE')).status,200);
+
 const pendingDelete=await deletionPhoto(rec25,mixedYear,'pending-delete');
 for(const viewer of [lead,admin]){
  const syncState=(await call(viewer,'state?yearId='+mixedYear)).data;
@@ -164,6 +277,12 @@ assert.equal((await call(rec25,'intake/process',{id:reuploaded,recognizedLines:[
 assert.equal((await call(admin,'intake',{id:reuploaded},'DELETE')).data.deleted,true,'administrator may delete a failed-recognition upload');
 const leadDelete=await deletionPhoto(lead,mixedYear,'lead-pending-delete');
 assert.equal((await call(lead,'intake',{id:leadDelete},'DELETE')).status,200,'college lead may delete their own unassigned upload');
+const invalidPhoto=await deletionPhoto(rec25,mixedYear,'invalid-score-range');
+const invalidOcr=await call(rec25,'intake/process',{id:invalidPhoto,recognizedLines:[mixedStudents[0].sid+' 随组学生0 -1',mixedStudents[1].sid+' 随组学生1 101']});
+assert.equal(invalidOcr.status,200);assert.equal(invalidOcr.data.status,'needs_review');assert.match(invalidOcr.data.reason,/0～100/);
+assert.equal((await call(rec25,'event/'+mixedEvent)).data.scores.length,1,'invalid recognized scores do not enter the draft');
+assert.match((await call(rec25,'state?yearId='+mixedYear)).data.intake.find(photo=>photo.id===invalidPhoto).error,/0～100/);
+assert.equal((await call(rec25,'intake',{id:invalidPhoto},'DELETE')).status,200);
 const groupForm=new FormData();groupForm.set('yearId',mixedYear);groupForm.set('date','2026-10-14');groupForm.set('batchId',crypto.randomUUID());groupForm.set('file',new Blob([groupPng,Buffer.from('follow-group'+nonce)],{type:'image/png'}),'group.png');
 const groupPhoto=await call(rec25,'intake',groupForm);assert.equal(groupPhoto.status,200);
 const groupRecognition=await call(rec25,'intake/process',{id:groupPhoto.data.id,recognizedLines:[mixedStudents[29].sid+' 随组学生29 81',mixedStudents[0].sid+' 随组学生0 80'],recognizedRatingText:'等次：良'});
@@ -181,6 +300,24 @@ for(const viewer of [rec25,lead,admin]){
  const detail=(await call(viewer,'event/'+mixedEvent)).data;
  assert.equal(detail.photos.length,1);assert.equal(detail.scores.length,3);
 }
+
+// Recognized draft photos may be removed without changing scores or ratings.
+const removable=await deletionPhoto(rec25,mixedYear,'recognized-delete');
+assert.equal((await call(rec25,'intake/process',{id:removable,recognizedLines:[mixedStudents[0].sid+' 随组学生0 80']})).status,200);
+const beforePhotoDelete=(await call(rec25,'event/'+mixedEvent)).data;
+assert.equal((await call(rec24,'intake',{id:removable,recognized:true},'DELETE')).status,403);
+const removedRecognized=await call(rec25,'intake',{id:removable,recognized:true},'DELETE');
+assert.equal(removedRecognized.status,200,JSON.stringify(removedRecognized.data));
+assert.equal(removedRecognized.data.scoresPreserved,true);
+const afterPhotoDelete=(await call(rec25,'event/'+mixedEvent)).data;
+assert.deepEqual(afterPhotoDelete.scores,beforePhotoDelete.scores);
+assert.equal(afterPhotoDelete.event.rating,beforePhotoDelete.event.rating);
+assert.equal(afterPhotoDelete.photos.length,beforePhotoDelete.photos.length-1);
+assert.ok(afterPhotoDelete.event.version>beforePhotoDelete.event.version);
+assert.equal((await call(rec25,'intake/photo/'+removable)).status,400);
+assert.ok(!(await call(rec25,'state?yearId='+mixedYear)).data.intakeLinks.some(link=>link.intake_id===removable));
+const uploadAgain=await deletionPhoto(rec25,mixedYear,'recognized-delete');
+assert.equal((await call(admin,'intake',{id:uploadAgain},'DELETE')).status,200,'same image can be uploaded after recognized photo deletion');
 
 async function mixedPage(label,date,lines,ratingText){
  const form=new FormData();form.set('yearId',mixedYear);form.set('date',date);form.set('batchId',crypto.randomUUID());form.set('file',new Blob([groupPng,Buffer.from(label+nonce)],{type:'image/png'}),label+'.png');
@@ -208,6 +345,7 @@ assert.equal((await call(rec25,'event/'+mixedEvent,{action:'save',version:manual
 const beforeConfirm=(await call(lead,'event/'+mixedEvent)).data.event;
 assert.equal((await call(lead,'event/'+mixedEvent,{action:'commit',version:beforeConfirm.version,rating:'good',rows:[{sid:minority.sid,state:'scored',score:86}]},'PUT')).status,200);
 const lockedMixed=(await call(rec25,'event/'+mixedEvent)).data.event;
+for(const user of [rec25,lead,admin]) assert.equal((await call(user,'intake',{id:groupPhoto.data.id,recognized:true},'DELETE')).status,400,'confirmed evidence is protected for every role');
 assert.equal((await call(rec25,'event/'+mixedEvent,{action:'rate',version:lockedMixed.version,rating:'pass'},'PUT')).status,403,'grade recorder cannot rate confirmed activity');
 assert.equal((await call(rec25,'intake/process',{id:groupPhoto.data.id,recognizedRatingText:'合格'})).status,200);
 assert.equal((await call(lead,'event/'+mixedEvent)).data.event.rating,'good','reprocessing a photo cannot change confirmed rating');
@@ -260,7 +398,10 @@ assert.equal((await call(lead,'event/'+id,{action:'rate',version:personalVersion
 assert.equal((await call(rec24,'state?yearId='+year)).data.todos.find(todo=>todo.target.type==='event'&&todo.target.id===id).reason,'awaiting_confirmation');
 const png=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aWlUAAAAASUVORK5CYII=','base64');
 const form=new FormData();form.set('eventId',id);form.set('file',new Blob([png,Buffer.from(nonce)],{type:'image/png'}),'sample.png');
+const beforeUpload=(await call(rec24,'event/'+id)).data.event;
 const photo=await call(rec24,'photos',form);assert.equal(photo.status,200);
+assert.equal((await call(rec24,'event/'+id)).data.event.version,beforeUpload.version+1,'upload invalidates stale edits and deletion confirmations');
+assert.equal((await call(rec24,'event/'+id,{version:beforeUpload.version},'DELETE')).status,400,'stale delete must preserve the newly uploaded photo');
 assert.equal((await call(rec24,'photo/'+photo.data.id)).status,200);
 assert.equal((await call(rec24,'state?yearId='+year)).data.events.find(event=>event.id===id).photos,1,'directly uploaded photo is counted');
 assert.equal((await call(rec25,'photo/'+photo.data.id)).status,403,'recorder cannot read another upload');
@@ -319,6 +460,10 @@ assert.equal((await call(lead,'intake/photo/'+cross.data.id)).status,403);
 assert.equal((await call(lead,'event/'+next.id)).data.photos.some(photo=>photo.id===cross.data.id),false);
 assert.equal((await call(lead,'state?yearId='+year)).data.intake.some(photo=>photo.id===cross.data.id),false);
 assert.ok(!(await call(lead,'state?yearId='+year)).data.todos.some(todo=>todo.target.type==='photo'&&todo.target.id===cross.data.id),'cross-college photo metadata is not exposed through todos');
+for(const user of [lead,rec24,rec25]) assert.equal((await call(user,'intake',{id:cross.data.id,recognized:true},'DELETE')).status,403,'mixed-scope photo cannot be deleted by a partial manager');
+const gradesBeforeCrossDelete=(await call(admin,'state?yearId='+year)).data.grades;
+assert.equal((await call(admin,'intake',{id:cross.data.id,recognized:true},'DELETE')).status,200,'admin may delete a recognized photo linked to several draft groups');
+assert.deepEqual((await call(admin,'state?yearId='+year)).data.grades,gradesBeforeCrossDelete,'all groups retain their scores');
 const foreignGroup=full.groups.find(row=>row.college===collegeB);
 assert.equal((await call(lead,'events',{groupId:foreignGroup.id,date:'2026-10-03'})).status,403,'college lead cannot create another college activity');
 assert.equal((await call(lead,'students',{yearId:year,sid:sidB},'DELETE')).status,403,'college lead cannot remove another college student');
@@ -327,7 +472,13 @@ const leadPhoto=await call(lead,'intake',leadForm);assert.equal(leadPhoto.status
 const leadProcessed=await call(lead,'intake/process',{id:leadPhoto.data.id,recognizedLines:[leadSid+' 甲三 83'],recognizedRatingText:'优'});assert.equal(leadProcessed.status,200);assert.equal(leadProcessed.data.matched,1,'college lead may recognize own photo');
 const leadState=(await call(lead,'state?yearId='+year)).data,leadGroup=leadState.groups.find(row=>row.name==='院负责人组'),leadEvent=leadState.events.find(row=>row.group_id===leadGroup.id);
 assert.ok(leadEvent);assert.equal(leadEvent.rating,'excellent','photo rating is applied by college lead');
-assert.equal((await call(lead,'event/'+leadEvent.id,{version:leadEvent.version},'DELETE')).status,200,'college lead may delete own-college activity');
+const leadScoresBefore=(await call(lead,'event/'+leadEvent.id)).data.scores;
+assert.equal((await call(lead,'intake',{id:leadPhoto.data.id,recognized:true},'DELETE')).status,200,'college lead may remove a recognized draft photo');
+const leadAfterPhotoDelete=(await call(lead,'event/'+leadEvent.id)).data;
+assert.deepEqual(leadAfterPhotoDelete.scores,leadScoresBefore,'deleting a photo with newly recognized scores preserves all of them');
+assert.equal(leadAfterPhotoDelete.event.rating,'excellent');
+assert.ok(leadAfterPhotoDelete.audit.some(entry=>entry.action==='delete_photo'));
+assert.equal((await call(lead,'event/'+leadEvent.id,{version:leadAfterPhotoDelete.event.version},'DELETE')).status,200,'college lead may delete own-college activity');
 assert.equal((await call(lead,'students',{yearId:year,oldSid:importSid,sid:importSid,name:'甲四改',college:collegeA,group:'导入组',cohort:'2024'},'PUT')).status,200,'college lead may edit own-college roster');
 assert.equal((await call(admin,'students',{yearId:year,oldSid:sidB,sid:sidB,name:'乙一改',college:collegeB,group:'乙组',cohort:'2024'},'PUT')).status,200,'administrator may edit school-wide roster');
 assert.equal((await call(admin,'students',{yearId:year,sid:sid25},'DELETE')).status,200);
@@ -482,7 +633,7 @@ const archiveEvent=(await call(admin,'events',{groupId:archiveGroup.id,date:'202
 const archivePhotoForm=new FormData();archivePhotoForm.set('eventId',archiveEvent);archivePhotoForm.set('file',new Blob([png,Buffer.from('archive'+nonce)],{type:'image/png'}),'archive.png');
 const archivePhoto=(await call(archiveLead,'photos',archivePhotoForm)).data.id;
 assert.equal((await call(archiveLead,'photo/'+archivePhoto)).status,200);
-assert.equal((await call(admin,'event/'+archiveEvent,{action:'commit',version:0,rating:'good',rows:[{sid:sidB,state:'scored',score:86}]},'PUT')).status,200);
+assert.equal((await call(admin,'event/'+archiveEvent,{action:'commit',version:(await call(admin,'event/'+archiveEvent)).data.event.version,rating:'good',rows:[{sid:sidB,state:'scored',score:86}]},'PUT')).status,200);
 const archivedPending=await deletionPhoto(archiveLead,archiveYear,'archived-pending-delete');
 const historyBefore=(await call(admin,'state?yearId='+archiveYear)).data;
 assert.equal((await call(lead,'years',{id:archiveYear,action:'archive'},'PATCH')).status,403);

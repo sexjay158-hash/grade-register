@@ -1,7 +1,7 @@
 import {requireAccessibleYear} from '@/lib/semester-access';
 import {deleteArchivedCollege} from '@/lib/delete-college';
 import {db,owner,access,requireAdmin,json,failure,readBody,now} from '@/lib/server';
-import {requireYear,cleanRosterText} from '@/lib/yearly-rosters';
+import {cleanRosterText} from '@/lib/yearly-rosters';
 import {ensureColleges,listCollegesForAccess} from '@/lib/colleges';
 import {FEATURES} from '@/lib/flags';
 

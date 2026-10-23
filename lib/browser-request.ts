@@ -43,10 +43,16 @@ export async function requestJson<T=unknown>(path:string,init:RequestInit={},opt
 // Only LOGIN_BUSY guarantees that no password check or session creation was started.
 // Never automatically repeat a timed-out or otherwise ambiguous login POST.
 export async function loginWithWaiting(value:{username:string;password:string},waiting:()=>void,signal?:AbortSignal,options:{maxWaitMs?:number;retryDelay?:()=>number}={}){
+ return authenticationWithWaiting('/api/auth/login',value,waiting,signal,options);
+}
+export async function activateWithWaiting(value:{username:string;code:string;password:string},waiting:()=>void,signal?:AbortSignal,options:{maxWaitMs?:number;retryDelay?:()=>number}={}){
+ return authenticationWithWaiting('/api/auth/activate',value,waiting,signal,options);
+}
+async function authenticationWithWaiting(path:string,value:unknown,waiting:()=>void,signal?:AbortSignal,options:{maxWaitMs?:number;retryDelay?:()=>number}={}){
  const end=Date.now()+(options.maxWaitMs??300000);
  let rejections=0;
  for(;;){
-  try{return await requestJson('/api/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(value),signal},{timeoutMs:20000});}
+  try{return await requestJson(path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(value),signal},{timeoutMs:20000});}
   catch(error){
    if(!(error instanceof BrowserRequestError)||error.status!==503||error.code!=='LOGIN_BUSY')throw error;
    const base=Math.min(15000,3000*2**Math.min(rejections++,3));

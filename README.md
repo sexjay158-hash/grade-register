@@ -49,6 +49,8 @@ For browser QA on managed Linux, use `sites-preview start`. The project's dev sc
 
 Current builds use project-issued usernames and passwords. Open `/login` for an existing account; a fresh database requires a server-side `ADMIN_SETUP_TOKEN` and `/setup` to create its one administrator. The older platform sign-in path is available only if `localAccounts` is turned off in `lib/flags.ts`.
 
+小组线上报名：管理员在当前学期的“学生名单 → 小组报名链接与审核”生成链接，发给组长。起初无需导入或预建小组名单；组长用学号、姓名、学院和密码注册本学期账号，登录后申报自己的新小组及 1～60 名成员。组长自动列为成员，成员学号前四位须与组长一致，作为入学年级。账号只能查看自己的审核状态；公开页面不展示其他小组或正式名单。待审核记录不会修改正式名单；管理员或对应学院负责人按学院、年级查看详情和统计，核对后点击“审核通过并导入名单”，复用现有名单导入的去重、学院权限和学期归档保护。退回需填写原因，组长登录后可重新提交；管理员及学院负责人均可导出含“小组、成员明细、学院年级统计”的 Excel，学院负责人仅能导出本院。管理员可关闭报名链接。`lib/flags.ts` 的 `groupRegistration=false` 可隐藏入口并停用报名/审核接口，已提交记录保留。上线前源码快照：`D:\课外锻炼\backups\source-before-group-registration-20261022.tar.gz`。报名账号是自注册，系统没有学生身份核验；学院负责人审核时须核对组长和成员信息。
+
 The Worker uses `vinext/server/fetch-handler`, including Vinext's config-aware image handling. After building, `npm start` runs that Worker locally through Wrangler on `127.0.0.1`, sharing `.wrangler/state` with dev preview and local D1 migrations; it does not deploy the site or simulate sign-in. Use the URL printed by the server. Pass `npm start -- --port <port>` to select a different built-preview port.
 
 Local previews use Miniflare's placeholder `Request.cf` metadata without a network lookup. Set `CLOUDFLARE_CF_FETCH_ENABLED=true` to opt into fetching preview metadata; this setting does not change hosted request metadata.
@@ -201,3 +203,10 @@ The portable build runs Vinext directly without a host `timeout` command. The ma
 ## 照片与活动共享同步
 
 年级负责人保存的照片、活动、成绩和评级由院负责人及管理员按权限共同查看；新增未归组照片也记录上传学院并提供院负责人只读查看。页面显示最近同步时间，可手动同步。历史未归组照片、同步间隔和回退方式见 [同步说明](docs/shared-data-sync.md)。
+
+
+## 学院统一批量开通小组账号（本地验收）
+
+院负责人在“本院账号”、管理员在“人员权限”选择学期，下载模板收集组长信息，核对正式名单后批量开户。每组一个学号账号，独立一次性激活码由负责人分别发放；组长激活后自己设置至少六位密码，只能操作指定学期的本组草稿。支持重复导入跳过、停用、重置和组长交接，历史成绩保留。详见 [小组账号使用与回退说明](docs/group-accounts.md)。
+
+运行 `npm run verify:group-accounts` 进行两万学生、一千组的独立数据验收，报告保存在项目上级 `reports/group-accounts-20261023`，不会修改日常数据库。该测试不等于两万人同时在线，也不代表 OCR 识别准确率。

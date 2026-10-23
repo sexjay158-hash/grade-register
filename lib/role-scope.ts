@@ -11,19 +11,22 @@ export const scopeCohortExpr=(alias='s')=>FEATURES.groupCohortScope?'gc.cohort':
 export function canReadCollege(a:Access,college:string){return a.role==='admin'||a.college===college;}
 export function assertRosterEditor(a:Access,college:string,cohort?:string){
  if(a.role==='admin')return;
+ if(a.groupId)throw new Error('无权限：小组录入员不能修改正式名单');
  if(a.college===college&&(a.role==='college_lead'||a.role==='recorder'&&FEATURES.gradeRosterManagement&&!!cohort&&cohort===a.cohort))return;
  throw new Error('无权限：只能管理负责学院和年级的学生名单');
 }
-export async function assertStudentScope(a:Access,yearId:string,sid:string,_write=false){
+export async function assertStudentScope(a:Access,yearId:string,sid:string,write=false){
+ if(write)await requireAccessibleYear(a,yearId,true);
  if(a.role==='admin')return;
- const row=await db().prepare(`SELECT s.college,${scopeCohortExpr()} AS cohort FROM roster_students s ${cohortJoin()} WHERE s.owner=? AND s.year_id=? AND s.sid=? AND s.active=1`).bind(a.owner,yearId,sid).first<{college:string;cohort:string}>();
- if(!row||row.college!==a.college||(a.role==='recorder'&&row.cohort!==a.cohort))throw new Error('无权限：学生不在你的负责范围');
+ const row=await db().prepare(`SELECT s.college,s.group_id,${scopeCohortExpr()} AS cohort FROM roster_students s ${cohortJoin()} WHERE s.owner=? AND s.year_id=? AND s.sid=? AND s.active=1`).bind(a.owner,yearId,sid).first<{college:string;cohort:string;group_id:string}>();
+ if(!row||row.college!==a.college||(a.groupId?row.group_id!==a.groupId:a.role==='recorder'&&row.cohort!==a.cohort))throw new Error('无权限：学生不在你的负责范围');
 }
 export async function assertGroupScope(a:Access,groupId:string,write=false){
  const group=await db().prepare('SELECT year_id,college FROM roster_groups WHERE id=? AND owner=?').bind(groupId,a.owner).first<{year_id:string;college:string}>();
  if(group)await requireAccessibleYear(a,group.year_id,write);
  if(!group||!canReadCollege(a,group.college))throw new Error('无权限：小组不在你的负责范围');
- if(a.role==='recorder'){
+ if(a.groupId&&groupId!==a.groupId)throw new Error('无权限：只能操作本人负责的小组');
+ if(a.role==='recorder'&&!a.groupId){
   const row=await db().prepare(`SELECT 1 FROM roster_students s ${cohortJoin()} WHERE s.owner=? AND s.year_id=? AND s.group_id=? AND s.active=1 AND ${scopeCohortExpr()}=? LIMIT 1`).bind(a.owner,group.year_id,groupId,a.cohort).first();
   if(!row)throw new Error('无权限：小组不属于你负责的年级');
  }
@@ -44,8 +47,8 @@ export async function assertPhotoScope(req:Request,kind:'intake'|'photo',id:stri
  if(a.role==='recorder'){
   if(FEATURES.groupCohortScope){
    if(kind==='photo')return a;
-   const links=await db().prepare('SELECT g.college,gc.cohort FROM intake_event_links l JOIN events e ON e.id=l.event_id JOIN roster_groups g ON g.id=e.group_id LEFT JOIN group_cohorts gc ON gc.owner=g.owner AND gc.group_id=g.id WHERE l.owner=? AND l.intake_id=?').bind(a.owner,id).all<{college:string;cohort:string|null}>();
-   if(links.results.length){if(links.results.some(group=>group.college!==a.college||group.cohort!==a.cohort))throw new Error('无权限：照片包含不负责的小组');return a;}
+   const links=await db().prepare('SELECT g.id,g.college,gc.cohort FROM intake_event_links l JOIN events e ON e.id=l.event_id JOIN roster_groups g ON g.id=e.group_id LEFT JOIN group_cohorts gc ON gc.owner=g.owner AND gc.group_id=g.id WHERE l.owner=? AND l.intake_id=?').bind(a.owner,id).all<{id:string;college:string;cohort:string|null}>();
+   if(links.results.length){if(links.results.some(group=>group.college!==a.college||(a.groupId?group.id!==a.groupId:group.cohort!==a.cohort)))throw new Error('无权限：照片包含不负责的小组');return a;}
    if(row.scope){await assertGroupScope(a,row.scope);return a;}
   }
   const actor=await db().prepare("SELECT account_id FROM photo_actors WHERE id=? AND owner=? AND (kind=? OR kind='intake') ORDER BY CASE WHEN kind=? THEN 0 ELSE 1 END LIMIT 1").bind(id,a.owner,kind,kind).first<{account_id:string}>();

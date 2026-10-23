@@ -1,7 +1,7 @@
 import type {ActivityRating} from './activity-rating';
 
 export type ArchiveGroup={id:string;name:string;college:string;members:number;responsible_cohort?:string|null};
-export type GroupActivity={id:string;group_id:string;number:number;date:string;status:string;photos:number;recorded:number;rating:ActivityRating|null};
+export type GroupActivity={id:string;group_id:string;number:number;date:string;status:string;photos:number;recorded:number;rating:ActivityRating|null;version?:number};
 // Use the already authorized, semester-scoped workspace data; never merge by group name.
 export function groupActivityArchives(groups:ArchiveGroup[],events:GroupActivity[]){
  const byGroup=new Map(groups.map(group=>[group.id,{group,activities:[] as GroupActivity[],committed:0,drafts:0,photos:0}]));

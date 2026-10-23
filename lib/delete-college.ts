@@ -10,6 +10,7 @@ export async function deleteArchivedCollege(owner:string,id:string,confirmedName
  if(confirmedName!==college.name)throw new Error('请输入完整学院名称确认删除');
  if(FEATURES.semesterArchives&&await d.prepare('SELECT 1 FROM roster_groups g JOIN semester_archives ar ON ar.owner=g.owner AND ar.year_id=g.year_id WHERE g.owner=? AND g.college=? LIMIT 1').bind(owner,college.name).first())throw new Error('学院包含归档学期数据，不能永久删除；请保留历史档案');
  await ensureActivityRatings();
+ if(FEATURES.bulkGroupAccounts){const {ensureGroupAccounts}=await import('./group-account-store');await ensureGroupAccounts();}
  const groupSql='SELECT id FROM roster_groups WHERE owner=? AND college=?';
  const eventSql=`SELECT id FROM events WHERE owner=? AND group_id IN (${groupSql})`;
  const eventArgs=[owner,owner,college.name];
@@ -21,6 +22,10 @@ export async function deleteArchivedCollege(owner:string,id:string,confirmedName
  const statement=(sql:string,args:unknown[])=>d.prepare(`${sql} AND ${guard}`).bind(...args,...guardArgs);
  // One transaction removes every school year. Shared intake photos retain their other colleges' links.
  const result=await d.batch([
+  ...(FEATURES.bulkGroupAccounts?[
+   statement('DELETE FROM group_account_activations WHERE account_id IN (SELECT account_id FROM group_account_assignments WHERE owner=? AND group_id IN (SELECT id FROM roster_groups WHERE owner=? AND college=?))',[owner,owner,college.name]),
+   statement('DELETE FROM group_account_assignments WHERE owner=? AND group_id IN (SELECT id FROM roster_groups WHERE owner=? AND college=?)',[owner,owner,college.name])
+  ]:[]),
   statement(`DELETE FROM scores WHERE event_id IN (${eventSql})`,eventArgs),
   statement(`DELETE FROM photos WHERE owner=? AND event_id IN (${eventSql})`,[owner,...eventArgs]),
   statement(`DELETE FROM intake_event_links WHERE owner=? AND event_id IN (${eventSql})`,[owner,...eventArgs]),

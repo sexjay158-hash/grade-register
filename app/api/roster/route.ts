@@ -6,7 +6,6 @@ import {db,access,json,failure} from '@/lib/server';
 import {assertRosterEditor} from '@/lib/role-scope';
 import {readBody} from '@/lib/server';
 import {validateRoster} from '@/lib/domain';
-import {requireYear} from '@/lib/yearly-rosters';
 import {requireActiveCollege} from '@/lib/colleges';
 export async function POST(req:Request){try{
  const a=await access(req),u=a.owner,d=db(),input=await readBody(req),yearId=await requireAccessibleYear(a,input.yearId,true);

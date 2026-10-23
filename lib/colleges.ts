@@ -1,6 +1,6 @@
 import {initializeOnce} from './query-initialization';
 import {db,now,type Access} from '@/lib/server';
-import {cohortExpr,scopeCohortExpr,cohortJoin} from '@/lib/role-scope';
+import {scopeCohortExpr,cohortJoin} from '@/lib/role-scope';
 import {ensureYearlyRoster,cleanRosterText} from '@/lib/yearly-rosters';
 
 export type College={id:string;name:string;active:number;students:number;groups:number;events:number;drafts:number};
@@ -53,10 +53,10 @@ export async function listCollegesForAccess(a:Access,yearId:string):Promise<Coll
  const all=await listColleges(a.owner,yearId);
  const visible=a.role==='admin'?all:all.filter(row=>row.name===a.college);
  if(a.role!=='recorder')return visible;
- const d=db(),scope=`s.owner=? AND s.year_id=? AND s.college=? AND s.active=1 AND ${scopeCohortExpr()}=?`;
+ const d=db(),scope=`s.owner=? AND s.year_id=? AND s.college=? AND s.active=1 AND ${a.groupId?'s.group_id':scopeCohortExpr()}=?`,scopeValue=a.groupId??a.cohort;
  const [students,events]=await d.batch([
-  d.prepare(`SELECT COUNT(*) AS students,COUNT(DISTINCT s.group_id) AS groups FROM roster_students s ${cohortJoin()} WHERE ${scope}`).bind(a.owner,yearId,a.college,a.cohort),
-  d.prepare(`SELECT e.status,COUNT(*) AS n FROM events e WHERE e.owner=? AND e.group_id IN (SELECT s.group_id FROM roster_students s ${cohortJoin()} WHERE ${scope}) GROUP BY e.status`).bind(a.owner,a.owner,yearId,a.college,a.cohort)
+  d.prepare(`SELECT COUNT(*) AS students,COUNT(DISTINCT s.group_id) AS groups FROM roster_students s ${cohortJoin()} WHERE ${scope}`).bind(a.owner,yearId,a.college,scopeValue),
+  d.prepare(`SELECT e.status,COUNT(*) AS n FROM events e WHERE e.owner=? AND e.group_id IN (SELECT s.group_id FROM roster_students s ${cohortJoin()} WHERE ${scope}) GROUP BY e.status`).bind(a.owner,a.owner,yearId,a.college,scopeValue)
  ]);
  const counts=students.results[0] as {students:number;groups:number};
  const byStatus=new Map((events.results as {status:string;n:number}[]).map(row=>[row.status,row.n]));

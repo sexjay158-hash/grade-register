@@ -1,6 +1,16 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {requestJson,requestPhoto,loginWithWaiting,readBrowserPreference,saveBrowserPreference} from '../lib/browser-request.ts';
+import {requestJson,requestPhoto,loginWithWaiting,activateWithWaiting,readBrowserPreference,saveBrowserPreference} from '../lib/browser-request.ts';
+
+test('activation waits only for explicit admission rejection and never replays an uncertain write',async()=>{
+ const original=globalThis.fetch;let calls=0,waiting=0;
+ try{
+  globalThis.fetch=async url=>{assert.equal(url,'/api/auth/activate');return ++calls===1?Response.json({code:'LOGIN_BUSY'},{status:503}):Response.json({ok:true});};
+  assert.deepEqual(await activateWithWaiting({username:'20240001',code:'abc',password:'abc123'},()=>waiting++,undefined,{retryDelay:()=>1}),{ok:true});assert.equal(waiting,1);assert.equal(calls,2);
+  calls=0;globalThis.fetch=async()=>{calls++;throw new TypeError('network lost');};
+  await assert.rejects(activateWithWaiting({username:'20240001',code:'abc',password:'abc123'},()=>{}),/操作可能已保存/);assert.equal(calls,1);
+ }finally{globalThis.fetch=original;}
+});
 
 test('blocked storage and server rendering do not interrupt startup',()=>{
  const original=Object.getOwnPropertyDescriptor(globalThis,'window');

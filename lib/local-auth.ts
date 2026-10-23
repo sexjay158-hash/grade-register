@@ -2,7 +2,7 @@ import {storeSession,replacePassword} from './session-store';
 import {env} from 'cloudflare:workers';
 import {PASSWORD_MIN_LENGTH} from './password-policy';
 
-export type LocalAccount={id:string;username:string;role:'admin'|'college_lead'|'recorder';college:string|null;cohort:string|null;active:number};
+export type LocalAccount={id:string;username:string;role:'admin'|'college_lead'|'recorder'|'group_recorder';college:string|null;cohort:string|null;active:number};
 type StoredAccount=LocalAccount&{password_hash:string;salt:string;iterations:number};
 
 const ADMIN_ID='school-admin';
@@ -68,7 +68,7 @@ async function derive(password:string,salt:string,iterations=ITERATIONS){
  return hex(new Uint8Array(await crypto.subtle.deriveBits({name:'PBKDF2',hash:'SHA-256',salt:bytes(salt),iterations},key,256)));
 }
 export async function passwordRecord(password:string){const salt=randomHex(16);return {salt,iterations:ITERATIONS,password_hash:await derive(password,salt)};}
-export async function verifyPassword(password:string,account:StoredAccount|null){
+export async function verifyPassword(password:string,account:Pick<StoredAccount,'password_hash'|'salt'|'iterations'>|null){
  const salt=account?.salt??'00000000000000000000000000000000';
  const actual=await derive(password,salt,account?.iterations??ITERATIONS),expected=account?.password_hash??'0'.repeat(64);
  let mismatch=actual.length^expected.length;for(let i=0;i<64;i++)mismatch|=actual.charCodeAt(i)^expected.charCodeAt(i);

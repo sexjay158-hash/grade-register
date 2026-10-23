@@ -1,6 +1,5 @@
 import {db} from './server';
 import {FEATURES} from './flags';
-import {normalizeCohort} from './cohort';
 import {majorityCohort} from './group-cohort-domain';
 
 export async function refreshGroupCohorts(owner:string,yearId:string){

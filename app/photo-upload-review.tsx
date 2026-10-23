@@ -8,9 +8,12 @@ import './photo-upload-review.css';
 
 // Keep selections in the browser until the user explicitly confirms them.
 export function usePhotoUploadReview(scope:string,upload:(files:File[])=>Promise<File[]>,disabled:boolean){
- const [files,setFiles]=useState<File[]>([]),[confirming,setConfirming]=useState(false),inFlight=useRef(false),currentScope=useRef(scope);
- currentScope.current=scope;
- useEffect(()=>{setFiles([]);},[scope]);
+ const [selection,setSelection]=useState<{scope:string;files:File[]}>({scope,files:[]}),[confirming,setConfirming]=useState(false),inFlight=useRef(false),currentScope=useRef(scope);
+ // Clear the previous activity's files before this render can expose them again.
+ if(selection.scope!==scope)setSelection({scope,files:[]});
+ const files=selection.scope===scope?selection.files:[];
+ const setFiles=(next:File[]|((previous:File[])=>File[]))=>setSelection(previous=>({scope,files:typeof next==='function'?next(previous.scope===scope?previous.files:[]):next}));
+ useEffect(()=>{currentScope.current=scope;},[scope]);
  function selectPhotos(selected:FileList|null){
   if(!selected?.length||disabled||inFlight.current)return;
   const incoming=Array.from(selected);
@@ -28,8 +31,9 @@ export function usePhotoUploadReview(scope:string,upload:(files:File[])=>Promise
 }
 
 function PhotoUploadReview({files,busy,onChange,onConfirm}:{files:File[];busy:boolean;onChange:(files:File[])=>void;onConfirm:()=>void}){
- const [previews,setPreviews]=useState<{file:File;url:string}[]>([]);
- useEffect(()=>{const next=files.map(file=>({file,url:URL.createObjectURL(file)}));setPreviews(next);return()=>next.forEach(item=>URL.revokeObjectURL(item.url));},[files]);
+ const [previewState,setPreviews]=useState<{files:File[];items:{file:File;url:string}[]}|null>(null);
+ useEffect(()=>{const items=files.map(file=>({file,url:URL.createObjectURL(file)}));const frame=requestAnimationFrame(()=>setPreviews({files,items}));return()=>{cancelAnimationFrame(frame);items.forEach(item=>URL.revokeObjectURL(item.url));};},[files]);
+ const previews=previewState?.files===files?previewState.items:[];
  return <section className="photo-upload-review" aria-label="待上传照片确认">
   <div className="photo-review-heading"><strong>待上传照片 · {files.length} 张</strong><Button type="button" variant="ghost" size="sm" disabled={busy} onClick={()=>onChange([])}>取消全部</Button></div>
   <p>请核对照片和活动日期。可移除选错的照片，也可继续选择；点击确认后才上传并识别。</p>
